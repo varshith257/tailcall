@@ -35,6 +35,8 @@ async fn fetch(req: worker::Request, env: worker::Env, context: worker::Context)
 #[worker::event(start)]
 fn start() {
   // Initialize Logger
+  console_error_panic_hook::set_once();
+  // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
   wasm_logger::init(wasm_logger::Config::new(log::Level::Info));
 }
 

@@ -6,8 +6,8 @@ use super::jwt::jwt_verify::JwtVerifier;
 use crate::http::RequestContext;
 use crate::{blueprint, HttpIO};
 
-pub(crate) trait Verify {
-  async fn verify(&self, req_ctx: &RequestContext) -> Result<(), Error>;
+pub trait Verify {
+  fn verify(&self, req_ctx: &RequestContext) -> impl std::future::Future<Output = Result<(), Error>> + Send;
 }
 
 #[allow(clippy::large_enum_variant)]

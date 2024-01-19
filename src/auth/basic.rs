@@ -1,6 +1,6 @@
 use headers::authorization::Basic;
 use headers::{Authorization, HeaderMapExt};
-use htpasswd_verify::Htpasswd;
+use crate::auth::tmp::Htpasswd;
 
 use super::error::Error;
 use super::verify::Verify;
@@ -8,11 +8,12 @@ use crate::blueprint;
 use crate::http::RequestContext;
 
 pub struct BasicVerifier {
-  verifier: Htpasswd<'static>,
+  verifier: crate::auth::tmp::Htpasswd<'static>,
 }
 
 impl Verify for BasicVerifier {
   async fn verify(&self, req_ctx: &RequestContext) -> Result<(), Error> {
+    log::info!("hh");
     let header = req_ctx.req_headers.typed_get::<Authorization<Basic>>();
 
     let Some(header) = header else {
