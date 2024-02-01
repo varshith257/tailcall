@@ -2,14 +2,14 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
+use tailcall::config::ConfigSet;
 use tokio::sync::oneshot::{self};
 
 use super::http_1::start_http_1;
 use super::http_2::start_http_2;
 use super::server_config::ServerConfig;
 use crate::blueprint::{Blueprint, Http};
-use crate::cli::CLIError;
-use crate::config::ConfigSet;
+use crate::CLIError;
 
 pub struct Server {
     config_set: ConfigSet,

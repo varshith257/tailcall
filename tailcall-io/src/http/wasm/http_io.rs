@@ -5,8 +5,6 @@ use reqwest::Client;
 use tailcall::http::Response;
 use tailcall::HttpIO;
 
-use crate::to_anyhow;
-
 #[derive(Clone)]
 pub struct CloudflareHttp {
     client: Client,
@@ -90,4 +88,8 @@ pub async fn to_request(mut req: worker::Request) -> Result<hyper::Request<hyper
         builder = builder.header(k, v);
     }
     Ok(builder.body(hyper::body::Body::from(body))?)
+}
+
+fn to_anyhow<T: std::fmt::Display>(e: T) -> anyhow::Error {
+    anyhow!("{}", e)
 }

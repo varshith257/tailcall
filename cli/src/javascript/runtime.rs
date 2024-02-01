@@ -3,11 +3,11 @@ use std::cell::RefCell;
 use async_std::task::block_on;
 use lazy_static::lazy_static;
 use mini_v8::{MiniV8, Script, Value, Values};
+use tailcall::channel::{Command, Event};
+use tailcall::ScriptIO;
 
 use crate::blueprint::{self};
-use crate::channel::{Command, Event};
-use crate::cli::javascript::serde_v8::SerdeV8;
-use crate::ScriptIO;
+use crate::javascript::serde_v8::SerdeV8;
 
 thread_local! {
   static CLOSURE: RefCell<anyhow::Result<mini_v8::Value>> = const { RefCell::new(Ok(mini_v8::Value::Null))};

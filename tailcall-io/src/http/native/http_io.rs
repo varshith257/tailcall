@@ -5,10 +5,9 @@ use http_cache_reqwest::{Cache, CacheMode, HttpCache, HttpCacheOptions, MokaMana
 use hyper::body::Bytes;
 use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-
-use super::HttpIO;
-use crate::config::Upstream;
-use crate::http::Response;
+use tailcall::config::Upstream;
+use tailcall::http::Response;
+use tailcall::HttpIO;
 
 #[derive(Clone)]
 pub struct NativeHttp {

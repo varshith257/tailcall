@@ -8,7 +8,7 @@ pub trait SerdeV8: Sized {
     fn from_v8(value: &Value) -> anyhow::Result<Self>;
 }
 
-fn v8_serde(value: mini_v8::Value) -> anyhow::Result<serde_json::Value> {
+fn v8_serde(value: Value) -> anyhow::Result<serde_json::Value> {
     let serde_value: serde_json::Value = match value {
         Value::Undefined => serde_json::Value::Null,
         Value::Null => serde_json::Value::Null,
@@ -44,8 +44,8 @@ fn v8_serde(value: mini_v8::Value) -> anyhow::Result<serde_json::Value> {
     Ok(serde_value)
 }
 
-fn serde_v8(value: serde_json::Value, v8: &mini_v8::MiniV8) -> anyhow::Result<mini_v8::Value> {
-    let value: mini_v8::Value = match value {
+fn serde_v8(value: serde_json::Value, v8: &MiniV8) -> anyhow::Result<Value> {
+    let value: Value = match value {
         serde_json::Value::Null => Value::Null,
         serde_json::Value::Bool(b) => Value::Boolean(b),
         serde_json::Value::Number(n) => Value::Number(n.as_f64().unwrap_or_default()),

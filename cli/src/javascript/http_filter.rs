@@ -4,10 +4,9 @@ use std::sync::Arc;
 use futures_util::future::join_all;
 use futures_util::Future;
 use hyper::body::Bytes;
-
-use crate::channel::{Command, Event, JsResponse};
-use crate::http::Response;
-use crate::{HttpIO, ScriptIO};
+use tailcall::channel::{Command, Event, JsResponse};
+use tailcall::http::Response;
+use tailcall::{HttpIO, ScriptIO};
 
 #[derive(Clone)]
 pub struct HttpFilter {

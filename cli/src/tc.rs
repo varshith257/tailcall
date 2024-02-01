@@ -7,16 +7,16 @@ use clap::Parser;
 use env_logger::Env;
 use inquire::Confirm;
 use stripmargin::StripMargin;
+use tailcall::config::reader::ConfigReader;
+use tailcall::config::{Config, Upstream};
+use tailcall::{print_schema, FileIO};
 
 use super::command::{Cli, Command};
 use super::update_checker;
 use crate::blueprint::{validate_operations, Blueprint, OperationQuery};
-use crate::cli::fmt::Fmt;
-use crate::cli::server::Server;
-use crate::cli::{init_file, init_http, CLIError};
-use crate::config::reader::ConfigReader;
-use crate::config::{Config, Upstream};
-use crate::{print_schema, FileIO};
+use crate::fmt::Fmt;
+use crate::server::Server;
+use crate::{init_file, init_http, CLIError};
 
 const FILE_NAME: &str = ".tailcallrc.graphql";
 const YML_FILE_NAME: &str = ".graphqlrc.yml";

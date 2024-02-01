@@ -1,9 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
+use tailcall::http::AppContext;
+
 use crate::blueprint::{Blueprint, Http};
-use crate::cli::{init_env, init_http, init_http2_only, init_in_memory_cache};
-use crate::http::AppContext;
+use crate::{init_env, init_http, init_http2_only, init_in_memory_cache};
 
 pub struct ServerConfig {
     pub blueprint: Blueprint,

@@ -1,6 +1,5 @@
 use colored::*;
-
-use crate::config::Config;
+use tailcall::config::Config;
 
 pub struct Fmt {}
 

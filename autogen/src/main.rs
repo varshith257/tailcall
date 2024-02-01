@@ -8,8 +8,8 @@ use anyhow::{anyhow, Result};
 use gen_gql_schema::update_gql;
 use schemars::schema::RootSchema;
 use serde_json::{json, Value};
-use tailcall::cli::init_file;
 use tailcall::config;
+use tailcall_cli::init_file;
 
 static JSON_SCHEMA_FILE: &str = "../generated/.tailcallrc.schema.json";
 
