@@ -6,9 +6,9 @@ use async_graphql::futures_util::future::join_all;
 use criterion::{criterion_group, criterion_main, Criterion};
 use hyper::body::Bytes;
 use reqwest::Request;
-use tailcall::config::Batch;
-use tailcall::http::{DataLoaderRequest, HttpDataLoader, Response};
-use tailcall::HttpIO;
+use wasm_core::config::Batch;
+use wasm_core::http::{DataLoaderRequest, HttpDataLoader, Response};
+use wasm_core::HttpIO;
 
 #[derive(Clone)]
 struct MockHttpClient {

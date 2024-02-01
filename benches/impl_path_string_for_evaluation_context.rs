@@ -9,12 +9,12 @@ use hyper::header::HeaderValue;
 use hyper::HeaderMap;
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
-use tailcall::blueprint::Server;
-use tailcall::cache::InMemoryCache;
+use wasm_core::blueprint::Server;
+use wasm_core::cache::InMemoryCache;
 use tailcall::cli::{init_env, init_http, init_http2_only};
-use tailcall::http::RequestContext;
-use tailcall::lambda::{EvaluationContext, ResolverContextLike};
-use tailcall::path::PathString;
+use wasm_core::http::RequestContext;
+use wasm_core::lambda::{EvaluationContext, ResolverContextLike};
+use wasm_core::path::PathString;
 
 const INPUT_VALUE: &[&[&str]] = &[
     // existing values
@@ -148,7 +148,7 @@ fn assert_test(eval_ctx: &EvaluationContext<'_, MockGraphqlContext>) {
 }
 
 fn request_context() -> RequestContext {
-    let tailcall::config::Config { server, upstream, .. } = tailcall::config::Config::default();
+    let wasm_core::config::Config { server, upstream, .. } = wasm_core::config::Config::default();
     //TODO: default is used only in tests. Drop default and move it to test.
     let server = Server::try_from(server).unwrap();
 

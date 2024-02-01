@@ -4,10 +4,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use derive_setters::Setters;
 use hyper::HeaderMap;
 use serde_json::json;
-use tailcall::endpoint::Endpoint;
-use tailcall::has_headers::HasHeaders;
-use tailcall::http::RequestTemplate;
-use tailcall::path::PathString;
+use wasm_core::endpoint::Endpoint;
+use wasm_core::has_headers::HasHeaders;
+use wasm_core::http::RequestTemplate;
+use wasm_core::path::PathString;
 
 #[derive(Setters)]
 struct Context {

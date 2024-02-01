@@ -6,15 +6,3 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tailcall = {path = ".."}
-anyhow = "1.0.79"
-hyper = "0.14.28"
-reqwest = "0.11.23"
-async-trait = "0.1.77"
-log = "0.4.20"
-http-cache-reqwest = { version = "0.13.0", features = [
-    "manager-moka",
-], default-features = false }
-reqwest-middleware = "0.2.4"
-async-std = "1.12.0"
-worker = "0.0.18"

@@ -14,14 +14,14 @@ use pretty_assertions::{assert_eq, assert_ne};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tailcall::blueprint::Blueprint;
+use wasm_core::blueprint::Blueprint;
 use tailcall::cli::{init_env, init_file, init_http, init_in_memory_cache};
-use tailcall::config::reader::ConfigReader;
-use tailcall::config::{Config, ConfigSet};
-use tailcall::directive::DirectiveCodec;
-use tailcall::http::{AppContext, RequestContext};
-use tailcall::print_schema;
-use tailcall::valid::{Cause, Valid, ValidationError};
+use wasm_core::config::reader::ConfigReader;
+use wasm_core::config::{Config, ConfigSet};
+use wasm_core::directive::DirectiveCodec;
+use wasm_core::http::{AppContext, RequestContext};
+use wasm_core::print_schema;
+use wasm_core::valid::{Cause, Valid, ValidationError};
 
 static INIT: Once = Once::new();
 

@@ -2,8 +2,8 @@ use reqwest::Client;
 use serde_json::json;
 use tailcall::cli::server::Server;
 use tailcall::cli::{init_file, init_http};
-use tailcall::config::reader::ConfigReader;
-use tailcall::config::Upstream;
+use wasm_core::config::reader::ConfigReader;
+use wasm_core::config::Upstream;
 
 async fn test_server(configs: &[&str], url: &str) {
     let file_io = init_file();
