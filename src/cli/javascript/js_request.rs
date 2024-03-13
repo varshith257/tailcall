@@ -56,19 +56,29 @@ impl From<&reqwest::Url> for Uri {
 impl Display for Uri {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let host = self.host.as_deref().unwrap_or("localhost");
-        let port = self.port.map(|p| p.to_string()).unwrap_or_default();
         let scheme = match self.scheme {
             Scheme::Https => "https",
-            _ => "http",
+            Scheme::Http => "http",
         };
-        let path = self.path.as_str();
-        let query = self
-            .query
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect::<Vec<String>>()
-            .join("&");
-        write!(f, "{}://{}:{}{}?{}", scheme, host, port, path, query)
+        let mut uri = format!("{}://", scheme);
+        uri.push_str(host);
+
+        if let Some(port) = self.port {
+            uri.push_str(&format!(":{}", port));
+        }
+
+        uri.push_str(self.path.as_str());
+        if !self.query.is_empty() {
+            let query: Vec<String> = self
+                .query
+                .iter()
+                .map(|(key, value)| format!("{}={}", key, value))
+                .collect();
+            uri.push('?');
+            uri.push_str(&query.join("&"));
+        }
+
+        write!(f, "{}", uri)
     }
 }
 
