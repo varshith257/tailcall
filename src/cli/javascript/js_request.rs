@@ -3,9 +3,11 @@ use std::fmt::Display;
 
 use hyper::body::Bytes;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use super::create_header_map;
 use crate::is_default;
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct JsRequest {
@@ -38,18 +40,18 @@ pub struct Uri {
     port: Option<u16>,
 }
 
-impl From<&reqwest::Url> for Uri {
-    fn from(value: &reqwest::Url) -> Self {
-        Self {
+impl TryFrom<&reqwest::Url> for Uri {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Url) -> Result<Self, Self::Error> {
+        let res = Self {
             path: value.path().to_string(),
             query: value.query_pairs().into_owned().collect(),
-            scheme: match value.scheme() {
-                "https" => Scheme::Https,
-                _ => Scheme::Http,
-            },
+            scheme: serde_json::from_str(value.scheme())?,
             host: value.host_str().map(|u| u.to_string()),
             port: value.port(),
-        }
+        };
+        Ok(res)
     }
 }
 
@@ -104,7 +106,7 @@ impl TryFrom<&reqwest::Request> for JsRequest {
     type Error = anyhow::Error;
 
     fn try_from(req: &reqwest::Request) -> Result<Self, Self::Error> {
-        let url = Uri::from(req.url());
+        let url = Uri::try_from(req.url())?;
         let method = req.method().as_str().to_string();
         let headers = req
             .headers()
@@ -127,9 +129,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
     impl Uri {
         pub fn parse(input: &str) -> anyhow::Result<Self> {
-            Ok(Self::from(&reqwest::Url::parse(input)?))
+            Self::try_from(&Url::parse(input)?)
         }
     }
 
