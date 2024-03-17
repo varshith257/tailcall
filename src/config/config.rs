@@ -601,20 +601,15 @@ pub struct Http {
 /// Mutation.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
 pub struct Call {
-    #[serde(default, skip_serializing_if = "is_default")]
-    /// The name of the field on the `Query` type that you want to call. For
-    /// instance `user`.
-    pub query: Option<String>,
+    pub steps: Vec<Step>,
+}
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
+pub struct Step {
     #[serde(default, skip_serializing_if = "is_default")]
-    /// The name of the field on the `Mutation` type that you want to call. For
-    /// instance `createUser`.
-    pub mutation: Option<String>,
-
-    /// The arguments of the field on the `Query` or `Mutation` type that you
-    /// want to call. For instance `{id: "{{value.userId}}"}`.
+    pub call: String,
     #[serde(default, skip_serializing_if = "is_default")]
-    pub args: BTreeMap<String, Value>,
+    pub debug: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
