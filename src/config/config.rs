@@ -20,7 +20,7 @@ use crate::valid::{Valid, Validator};
 use crate::{is_default, scalar};
 
 #[derive(
-    Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
+Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
 )]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -292,7 +292,7 @@ fn merge_unions(
 }
 
 #[derive(
-    Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
+Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
 )]
 #[setters(strip_option)]
 pub struct RootSchema {
@@ -322,7 +322,7 @@ pub struct Omit {}
 /// A field definition containing all the metadata information about resolving a
 /// field.
 #[derive(
-    Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
+Serialize, Deserialize, Clone, Debug, Default, Setters, PartialEq, Eq, schemars::JsonSchema,
 )]
 #[setters(strip_option)]
 pub struct Field {
@@ -367,29 +367,14 @@ pub struct Field {
     pub omit: Option<Omit>,
 
     ///
-    /// Inserts an HTTP resolver for the field.
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub http: Option<Http>,
-
-    ///
-    /// Inserts a call resolver for the field.
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub call: Option<Call>,
-
-    ///
-    /// Inserts a GRPC resolver for the field.
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub grpc: Option<Grpc>,
-
-    ///
     /// Inserts a Javascript resolver for the field.
     #[serde(default, skip_serializing_if = "is_default")]
     pub script: Option<JS>,
 
     ///
-    /// Inserts a constant resolver for the field.
-    #[serde(rename = "const", default, skip_serializing_if = "is_default")]
-    pub const_field: Option<Const>,
+    /// Contains field resolvers
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub resolvers: Vec<Resolver>,
 
     ///
     /// Inserts a GraphQL resolver for the field.
@@ -405,22 +390,42 @@ pub struct Field {
     pub cache: Option<Cache>,
 }
 
+#[derive(
+Serialize, Deserialize, Clone, Debug, PartialEq, Eq, schemars::JsonSchema,
+)]
+pub enum Resolver {
+    ///
+    /// Inserts an HTTP resolver for the field.
+    HTTP(Http),
+
+    ///
+    /// Inserts a call resolver for the field.
+    Call(Call),
+
+    ///
+    /// Inserts a GRPC resolver for the field.
+    Grpc(Grpc),
+
+    ///
+    /// Inserts a constant resolver for the field.
+    Const(Const),
+}
+
 impl Field {
     pub fn has_resolver(&self) -> bool {
-        self.http.is_some()
-            || self.script.is_some()
-            || self.const_field.is_some()
-            || self.graphql.is_some()
-            || self.grpc.is_some()
-            || self.expr.is_some()
-            || self.call.is_some()
+        self.resolvers.len() > 0
     }
 
     /// Returns a list of resolvable directives for the field.
     pub fn resolvable_directives(&self) -> Vec<String> {
         let mut directives = Vec::new();
-        if self.http.is_some() {
-            directives.push(Http::trace_name());
+        for resolver in &self.resolvers {
+            match resolver {
+                Resolver::HTTP(_) => directives.push(Http::trace_name()),
+                Resolver::Call(_) => directives.push(Call::trace_name()),
+                Resolver::Grpc(_) => directives.push(Grpc::trace_name()),
+                Resolver::Const(_) => directives.push(Const::trace_name()),
+            }
         }
         if self.graphql.is_some() {
             directives.push(GraphQL::trace_name());
@@ -428,26 +433,14 @@ impl Field {
         if self.script.is_some() {
             directives.push(JS::trace_name());
         }
-        if self.const_field.is_some() {
-            directives.push(Const::trace_name());
-        }
-        if self.grpc.is_some() {
-            directives.push(Grpc::trace_name());
-        }
-        if self.call.is_some() {
-            directives.push(Call::trace_name());
-        }
         directives
     }
     pub fn has_batched_resolver(&self) -> bool {
-        self.http
-            .as_ref()
-            .is_some_and(|http| !http.group_by.is_empty())
-            || self.graphql.as_ref().is_some_and(|graphql| graphql.batch)
-            || self
-                .grpc
-                .as_ref()
-                .is_some_and(|grpc| !grpc.group_by.is_empty())
+        self.resolvers.iter().any(|resolver| match resolver {
+            Resolver::HTTP(http) => !http.group_by.is_empty(),
+            Resolver::Grpc(grpc) => !grpc.group_by.is_empty(),
+            _ => false,
+        }) || self.graphql.as_ref().is_some_and(|graphql| graphql.batch)
     }
     pub fn to_list(mut self) -> Self {
         self.list = true;
@@ -477,10 +470,10 @@ impl Field {
     pub fn is_omitted(&self) -> bool {
         self.omit.is_some()
             || self
-                .modify
-                .as_ref()
-                .and_then(|m| m.omit)
-                .unwrap_or_default()
+            .modify
+            .as_ref()
+            .and_then(|m| m.omit)
+            .unwrap_or_default()
     }
 }
 
@@ -751,7 +744,7 @@ impl Config {
 }
 
 #[derive(
-    Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default, schemars::JsonSchema,
+Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default, schemars::JsonSchema,
 )]
 pub enum Encoding {
     #[default]
@@ -770,12 +763,12 @@ mod tests {
         let f1 = Field { ..Default::default() };
 
         let f2 = Field {
-            http: Some(Http { group_by: vec!["id".to_string()], ..Default::default() }),
+            resolvers: vec![Resolver::HTTP(Http { group_by: vec!["id".to_string()], ..Default::default() })],
             ..Default::default()
         };
 
         let f3 = Field {
-            http: Some(Http { group_by: vec![], ..Default::default() }),
+            resolvers: vec![Resolver::HTTP(Http { group_by: vec![], ..Default::default() })],
             ..Default::default()
         };
 
