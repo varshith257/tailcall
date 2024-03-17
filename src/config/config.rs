@@ -601,15 +601,15 @@ pub struct Http {
 /// Mutation.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
 pub struct Call {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Holds the list of steps that need to performed in sequence
     pub steps: Vec<Step>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
-pub struct Step {
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub call: String,
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub debug: Option<String>
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, schemars::JsonSchema)]
+pub enum Step {
+    Operation(String),
+    Debug(Option<String>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, schemars::JsonSchema)]
