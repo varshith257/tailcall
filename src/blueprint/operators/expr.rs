@@ -65,7 +65,8 @@ fn compile(ctx: &CompilationContext, expr: ExprBody) -> Valid<Expression, String
             compile_grpc(grpc)
         }
         ExprBody::GraphQL(gql) => compile_graphql(config_module, operation_type, &gql),
-        ExprBody::Call(call) => compile_call(field, config_module, &call, operation_type),
+        ExprBody::Call(_call) => todo!(), /* compile_call(field, config_module, &call,
+                                           * operation_type), */
 
         // Safe Expr
         ExprBody::Const(value) => {

@@ -16,6 +16,7 @@ use crate::serde_value_ext::ValueExt;
 
 #[derive(Clone, Debug)]
 pub enum Expression {
+    Debug(Option<String>),
     Context(Context),
     Literal(DynamicValue),
     EqualTo(Box<Expression>, Box<Expression>),
@@ -32,6 +33,7 @@ pub enum Expression {
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Expression::Debug(prefix) => write!(f, "Debug({:?})", prefix),
             Expression::Context(_) => write!(f, "Context"),
             Expression::Literal(_) => write!(f, "Literal"),
             Expression::EqualTo(_, _) => write!(f, "EqualTo"),
@@ -124,6 +126,12 @@ impl Eval for Expression {
     ) -> Pin<Box<dyn Future<Output = Result<ConstValue>> + 'a + Send>> {
         Box::pin(async move {
             match self {
+                Expression::Debug(prefix) => {
+                    println!("{:?}.args: {:?}", prefix, ctx.graphql_ctx.args());
+                    println!("{:?}.ctx_args: {:?}", prefix, ctx.graphql_ctx_args);
+
+                    Ok(async_graphql::Value::Null)
+                }
                 Expression::Concurrency(conc, expr) => Ok(expr.eval(ctx, conc).await?),
                 Expression::Context(op) => match op {
                     Context::Value => {

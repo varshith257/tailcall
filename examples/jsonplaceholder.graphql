@@ -1,28 +1,21 @@
-schema
-  @server(port: 8000, graphiql: true, hostname: "0.0.0.0")
-  @upstream(baseURL: "http://jsonplaceholder.typicode.com", httpCache: true, batch: {delay: 100}) {
+scalar JSON
+
+schema @server(port: 8000, graphiql: false, hostname: "0.0.0.0") {
   query: Query
 }
 
 type Query {
-  posts: [Post] @http(path: "/posts")
-  users: [User] @http(path: "/users")
-  user(id: Int!): User @http(path: "/users/{{args.id}}")
-}
+  getA(input: JSON): JSON @const(data: "{{args.input.a}}") #{b: {c: "d"}}
+  getB: JSON @const(data: "{{args.b}}")
 
-type User {
-  id: Int!
-  name: String!
-  username: String!
-  email: String!
-  phone: String
-  website: String
-}
-
-type Post {
-  id: Int!
-  userId: Int!
-  title: String!
-  body: String!
-  user: User @call(query: "user", args: {id: "{{value.userId}}"})
+  getAB(input: JSON): JSON
+    @call(
+      steps: [
+        #
+        {debug: "beforeA"}
+        {operation: "getA"}
+        {debug: "beforeB"}
+        # {operation: "getB"}
+      ]
+    )
 }

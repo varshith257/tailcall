@@ -20,10 +20,10 @@ pub struct EvaluationContext<'a, Ctx: ResolverContextLike<'a>> {
     pub graphql_ctx: &'a Ctx,
 
     // Overridden Value for Async GraphQL Context
-    graphql_ctx_value: Option<Arc<Value>>,
+    pub graphql_ctx_value: Option<Arc<Value>>,
 
     // Overridden Arguments for Async GraphQL Context
-    graphql_ctx_args: Option<Arc<Value>>,
+    pub graphql_ctx_args: Option<Arc<Value>>,
 
     // TODO: JS timeout should be read from server settings
     pub timeout: Duration,

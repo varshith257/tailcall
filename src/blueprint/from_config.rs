@@ -123,6 +123,7 @@ impl TryFrom<&ConfigModule> for Blueprint {
     fn try_from(config_module: &ConfigModule) -> Result<Self, Self::Error> {
         config_blueprint()
             .try_fold(config_module, Blueprint::default())
+            .and_then(update_call)
             .to_result()
     }
 }

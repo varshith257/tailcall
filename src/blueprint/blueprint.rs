@@ -11,8 +11,10 @@ use serde_json::Value;
 use super::telemetry::Telemetry;
 use super::GlobalTimeout;
 use crate::blueprint::{Server, Upstream};
+use crate::config;
 use crate::lambda::Expression;
 use crate::schema_extension::SchemaExtension;
+use crate::valid::{Valid, Validator};
 
 /// Blueprint is an intermediary representation that allows us to generate
 /// graphQL APIs. It can only be generated from a valid Config.
@@ -137,6 +139,7 @@ pub struct FieldDefinition {
     pub resolver: Option<Expression>,
     pub directives: Vec<Directive>,
     pub description: Option<String>,
+    pub source: (String, config::Field),
 }
 
 impl FieldDefinition {
@@ -256,5 +259,56 @@ impl Blueprint {
         // We should safely assume the blueprint is correct and,
         // generation of schema cannot fail.
         schema.finish().unwrap()
+    }
+
+    pub fn query_def(&self) -> Option<&ObjectTypeDefinition> {
+        self.object_def(self.query().as_str())
+    }
+
+    pub fn mutation_def(&self) -> Option<&ObjectTypeDefinition> {
+        self.mutation()
+            .and_then(|mutation| self.object_def(mutation.as_str()))
+    }
+
+    pub fn object_def(&self, name: &str) -> Option<&ObjectTypeDefinition> {
+        self.definitions.iter().find_map(|d| match d {
+            Definition::Object(obj) => {
+                if obj.name == name {
+                    Some(obj)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+    }
+
+    pub fn modify_def<E>(
+        mut self,
+        f: impl Fn(&Definition) -> Valid<Definition, E>,
+    ) -> Valid<Self, E> {
+        Valid::from_iter(self.definitions.iter(), f).map(|def| {
+            self.definitions = def;
+            self
+        })
+    }
+}
+
+impl Definition {
+    pub fn modify_field<E>(
+        self,
+        f: impl Fn(&FieldDefinition) -> Valid<FieldDefinition, E>,
+    ) -> Valid<Self, E> {
+        match self {
+            Definition::Object(obj) => {
+                let mut obj = obj.clone();
+                Valid::from_iter(obj.fields.iter(), f).map(|fields| {
+                    obj.fields = fields;
+                    Definition::Object(obj)
+                })
+            }
+
+            _ => Valid::succeed(self),
+        }
     }
 }

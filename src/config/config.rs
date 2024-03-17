@@ -607,6 +607,7 @@ pub struct Call {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum Step {
     Operation(String),
     Debug(Option<String>),

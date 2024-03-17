@@ -32,6 +32,7 @@ impl Expression {
             None => {
                 let expr = self;
                 match expr {
+                    Expression::Debug(_) => expr,
                     Expression::Context(_) => expr,
                     Expression::Literal(_) => expr,
                     Expression::EqualTo(expr1, expr2) => {
