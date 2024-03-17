@@ -4,7 +4,7 @@ use self::telemetry::to_opentelemetry;
 use super::{Server, TypeLike};
 use crate::blueprint::compress::compress;
 use crate::blueprint::*;
-use crate::config::{Arg, Batch, Config, ConfigModule, Field};
+use crate::config::{Arg, Batch, Config, ConfigModule, Field, Resolver};
 use crate::json::JsonSchema;
 use crate::lambda::{Expression, IO};
 use crate::try_fold::TryFold;
@@ -89,8 +89,15 @@ where
         Some(type_) => {
             let mut schema_fields = HashMap::new();
             for (name, field) in type_.fields.iter() {
-                if field.script.is_none() && field.http.is_none() {
-                    schema_fields.insert(name.clone(), to_json_schema_for_field(field, config));
+                if field.script.is_none() {
+                    for resolver in field.resolvers.iter() {
+                        match resolver {
+                            Resolver::HTTP(_) => {
+                                schema_fields.insert(name.clone(), to_json_schema(field, config));
+                            }
+                            _ => (),
+                        }
+                    }
                 }
             }
             JsonSchema::Obj(schema_fields)

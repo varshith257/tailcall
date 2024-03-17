@@ -129,7 +129,7 @@ mod tests {
     use super::RequestTemplate;
     use crate::blueprint::GrpcMethod;
     use crate::config::reader::ConfigReader;
-    use crate::config::{Config, Field, GraphQLOperationType, Grpc, Link, LinkType, Type};
+    use crate::config::{Config, Field, GraphQLOperationType, Grpc, Link, LinkType, Resolver, Type};
     use crate::grpc::protobuf::{ProtobufOperation, ProtobufSet};
     use crate::lambda::CacheKey;
     use crate::mustache::Mustache;
@@ -160,7 +160,7 @@ mod tests {
         let grpc = Grpc { method: method.to_string(), ..Default::default() };
         config.types.insert(
             "foo".to_string(),
-            Type::default().fields(vec![("bar", Field::default().grpc(grpc))]),
+            Type::default().fields(vec![("bar", Field::default().resolvers(vec![Resolver::Grpc(grpc)]))]),
         );
 
         let protobuf_set = ProtobufSet::from_proto_file(
