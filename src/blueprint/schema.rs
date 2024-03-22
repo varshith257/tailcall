@@ -46,7 +46,7 @@ pub fn validate_field_has_resolver(
         .when(|| {
             if !field.has_resolver() {
                 if types.get(&field.type_of).eq(&Some(parent_ty)) {
-                        return true;
+                        return false;
                 }
                 let f_type = &field.type_of;
                 if let Some(ty) = types.get(f_type) {
