@@ -30,7 +30,7 @@ fn validate_type_has_resolvers(
     types: &BTreeMap<String, Type>,
 ) -> Valid<(), String> {
     Valid::from_iter(ty.fields.iter(), |(name, field)| {
-        validate_field_has_resolver(name, field, types)
+        validate_field_has_resolver(name, field, types, ty)
     })
     .trace(name)
     .unit()
@@ -40,10 +40,14 @@ pub fn validate_field_has_resolver(
     name: &str,
     field: &Field,
     types: &BTreeMap<String, Type>,
+    parent_ty: &Type,
 ) -> Valid<(), String> {
     Valid::<(), String>::fail("No resolver has been found in the schema".to_owned())
         .when(|| {
             if !field.has_resolver() {
+                if types.get(&field.type_of).eq(&Some(parent_ty)) {
+                        return true;
+                }
                 let f_type = &field.type_of;
                 if let Some(ty) = types.get(f_type) {
                     let res = validate_type_has_resolvers(f_type, ty, types);
