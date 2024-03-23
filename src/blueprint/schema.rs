@@ -44,15 +44,20 @@ pub fn validate_field_has_resolver(
 ) -> Valid<(), String> {
     Valid::<(), String>::fail("No resolver has been found in the schema".to_owned())
         .when(|| {
+            if types.get(&field.type_of).eq(&Some(parent_ty)) {
+                return true;
+            }
             if !field.has_resolver() {
-                if types.get(&field.type_of).eq(&Some(parent_ty)) {
-                        return false;
-                }
-                let f_type = &field.type_of;
-                if let Some(ty) = types.get(f_type) {
-                    let res = validate_type_has_resolvers(f_type, ty, types);
+                let type_name = &field.type_of;
+                if let Some(ty) = types.get(type_name) {
+                    // It's an enum
+                    if ty.variants.is_some() {
+                        return true;
+                    }
+                    let res = validate_type_has_resolvers(type_name, ty, types);
                     return !res.is_succeed();
                 } else {
+                    // It's a Scalar
                     return true;
                 }
             }
