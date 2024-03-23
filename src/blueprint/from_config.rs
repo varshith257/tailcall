@@ -91,7 +91,7 @@ where
         Some(type_) => {
             let mut schema_fields = HashMap::new();
             for (name, fieldx) in type_.fields.iter() {
-                if fieldx.script.is_none() && fieldx.http.is_none() && fieldx.ne(field) {
+                if fieldx.script.is_none() && fieldx.http.is_none() {
                     schema_fields.insert(name.clone(), to_json_schema_for_field(fieldx, config));
                 }
             }
