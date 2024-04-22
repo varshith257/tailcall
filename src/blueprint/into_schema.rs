@@ -8,7 +8,7 @@ use tracing::Instrument;
 
 use crate::blueprint::{Blueprint, Definition, Type};
 use crate::http::RequestContext;
-use crate::lambda::{Concurrent, Eval, EvaluationContext, ResolverContext};
+use crate::lambda::{Concurrent, Eval, EvaluationContext, Execute, ResolverContext};
 use crate::scalar::CUSTOM_SCALARS;
 
 fn to_type_ref(type_of: &Type) -> dynamic::TypeRef {
@@ -62,14 +62,21 @@ fn to_type(def: &Definition) -> dynamic::Type {
                                     "field_resolver",
                                     otel.name = ctx.path_node.map(|p| p.to_string()).unwrap_or(field_name.clone()), graphql.returnType = %type_ref
                                 );
-                                let expr = expr.to_owned();
+                                let executables = expr.to_owned().create_operation_list();
                                 FieldFuture::new(
                                     async move {
                                         let ctx: ResolverContext = ctx.into();
                                         let ctx = EvaluationContext::new(req_ctx, &ctx);
 
-                                        let const_value =
-                                            expr.eval(ctx, &Concurrent::Sequential).await?;
+                                        let mut results = (0..executables.len()).map(|_| ConstValue::Null).collect();
+                                        let mut index = executables.len() - 1;
+                                        while index > 0 {
+                                            let result = executables[index].execute(ctx.clone(), &results).await?;
+                                            results[index] = result;
+                                            index -= 1;
+                                        }
+                                        let const_value = executables[0].execute(ctx, &results).await?;
+
                                         let p = match const_value {
                                             ConstValue::List(a) => Some(FieldValue::list(a)),
                                             ConstValue::Null => FieldValue::NONE,

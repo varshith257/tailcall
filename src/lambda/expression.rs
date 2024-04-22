@@ -1,5 +1,7 @@
 use core::future::Future;
+use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
+use std::num::NonZeroU64;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -8,11 +10,12 @@ use async_graphql::ErrorExtensions;
 use async_graphql_value::ConstValue;
 use thiserror::Error;
 
-use super::{Concurrent, Eval, EvaluationContext, ResolverContextLike, IO};
 use crate::blueprint::DynamicValue;
 use crate::json::JsonLike;
 use crate::lambda::cache::Cache;
 use crate::serde_value_ext::ValueExt;
+
+use super::{Concurrent, Eval, EvaluationContext, IO, ResolverContextLike};
 
 #[derive(Clone, Debug)]
 pub enum Expression {
@@ -120,6 +123,86 @@ impl<'a> From<crate::valid::ValidationError<&'a str>> for EvaluationError {
     }
 }
 
+pub enum Operation {
+    Pending(Executable),
+    Output(ConstValue),
+}
+
+pub trait Execute {
+    async fn execute<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
+        &'a self,
+        ctx: EvaluationContext<'a, Ctx>,
+        results: &'a Vec<ConstValue>
+    ) -> Result<ConstValue>;
+}
+
+// impl Execute for Operation {
+//     async fn execute<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(&'a self, ctx: EvaluationContext<'a, Ctx>, results: &'a Vec<Operation>) -> Result<ConstValue> {
+//         match self {
+//             Operation::Pending(executable) => executable.execute(ctx, results).await,
+//             Operation::Output(value) => { Ok(value.clone()) }
+//         }
+//     }
+// }
+
+pub enum Executable {
+    ExpressionContextValue,
+    ExpressionContextPath { path: Vec<String> },
+    ExpressionContextPushArgs { expr: usize, and_then: usize },
+    ExpressionContextPushValue { expr: usize, and_then: usize },
+    ExpressionPath(usize, Vec<String>),
+    ExpressionDynamic(DynamicValue),
+    ExpressionProtect(usize),
+    ExpressionIO(IO),
+    ExpressionCache(Cache),
+}
+
+impl Execute for Executable {
+    async fn execute<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
+        &'a self,
+        ctx: EvaluationContext<'a, Ctx>,
+        results: &'a Vec<ConstValue>
+    ) -> Result<ConstValue> {
+        use Executable::*;
+        match self {
+            ExpressionContextValue => Ok(ctx.value().cloned().unwrap_or(async_graphql::Value::Null)),
+            ExpressionContextPath { path } => Ok(ctx
+                .path_value(path)
+                .map(|a| a.into_owned())
+                .unwrap_or(async_graphql::Value::Null)),
+            ExpressionContextPushArgs { expr, and_then } => {
+                let expr = results[*expr].clone();
+                let ctx = ctx.with_args(expr).clone();
+                Ok(results[*and_then].clone())
+            }
+            ExpressionContextPushValue { expr, and_then } => {
+                let expr = results[*expr].clone();
+                let ctx = ctx.with_value(expr);
+                Ok(results[*and_then].clone())
+            }
+            ExpressionPath(input, path) => {
+                let input = results[*input].clone();
+                Ok(input
+                    .get_path(path)
+                    .unwrap_or(&async_graphql::Value::Null)
+                    .clone())
+            },
+            ExpressionDynamic(value) => value.render_value(&ctx),
+            ExpressionProtect(expr) => {
+                ctx.request_ctx
+                    .auth_ctx
+                    .validate(ctx.request_ctx)
+                    .await
+                    .to_result()
+                    .map_err(|e| anyhow!("Authentication Failure: {}", e.to_string()))?;
+                Ok(results[*expr].clone())
+            }
+            ExpressionIO(io) => io.eval_inner(ctx, &Concurrent::Sequential).await,
+            ExpressionCache(cache) => cache.eval(ctx, &Concurrent::Sequential).await,
+        }
+    }
+}
+
 impl Expression {
     pub fn and_then(self, next: Self) -> Self {
         Expression::Context(Context::PushArgs { expr: Box::new(self), and_then: Box::new(next) })
@@ -127,6 +210,49 @@ impl Expression {
 
     pub fn with_args(self, args: Expression) -> Self {
         Expression::Context(Context::PushArgs { expr: Box::new(args), and_then: Box::new(self) })
+    }
+
+    pub fn create_operation_list(self) -> Vec<Executable> {
+        let mut queue = VecDeque::from([self]);
+        let mut index = 0;
+        let mut operations = Vec::new();
+        while let Some(expr) = queue.pop_front() {
+            index += 1;
+            let len = index;
+            let operation = match expr {
+                Expression::Context(op) => match op {
+                    Context::Value => Executable::ExpressionContextValue,
+                    Context::Path(path) => Executable::ExpressionContextPath { path: path.clone() },
+                    Context::PushArgs { expr, and_then } => {
+                        queue.push_back(expr.as_ref().clone());
+                        queue.push_back(and_then.as_ref().clone());
+                        Executable::ExpressionContextPushArgs { expr: len, and_then: len+1 }
+                    },
+                    Context::PushValue { expr, and_then } => {
+                        queue.push_back(expr.as_ref().clone());
+                        queue.push_back(and_then.as_ref().clone());
+                        Executable::ExpressionContextPushValue { expr: len, and_then: len+1 }
+                    },
+                },
+                Expression::Path(input, path) => {
+                    queue.push_back(input.as_ref().clone());
+                    Executable::ExpressionPath(len, path.clone())
+                },
+                Expression::Dynamic(value) => {
+                    Executable::ExpressionDynamic(value.clone())
+                },
+                Expression::Protect(expr) => {
+                    queue.push_back(expr.as_ref().clone());
+                    Executable::ExpressionProtect(len)
+                },
+                Expression::IO(io) => Executable::ExpressionIO(io.clone()),
+                Expression::Cache(cache) => {
+                    Executable::ExpressionCache(cache.clone())
+                },
+            };
+            operations.push(operation);
+        }
+        operations
     }
 }
 

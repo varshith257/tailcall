@@ -68,7 +68,7 @@ impl Eval for IO {
 }
 
 impl IO {
-    fn eval_inner<'a, Ctx: super::ResolverContextLike<'a> + Sync + Send>(
+    pub fn eval_inner<'a, Ctx: super::ResolverContextLike<'a> + Sync + Send>(
         &'a self,
         ctx: super::EvaluationContext<'a, Ctx>,
         _conc: &'a super::Concurrent,
