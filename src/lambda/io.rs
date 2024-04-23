@@ -50,94 +50,97 @@ impl Eval for IO {
         ctx: super::EvaluationContext<'a, Ctx>,
         _conc: &'a super::Concurrent,
     ) -> Pin<Box<dyn Future<Output = Result<ConstValue>> + 'a + Send>> {
-        let key = self.cache_key(&ctx);
-        Box::pin(async move {
-            ctx.request_ctx
-                .cache
-                .get_or_eval(key, move || {
-                    Box::pin(async {
-                        self.eval_inner(ctx, _conc)
-                            .await
-                            .map_err(|err| err.to_string())
-                    })
-                })
-                .await
-                .map_err(|err| anyhow::anyhow!(err))
-        })
+        Box::pin(async move { self.eval_io(ctx, _conc).await })
     }
 }
 
 impl IO {
-    pub fn eval_inner<'a, Ctx: super::ResolverContextLike<'a> + Sync + Send>(
+    pub fn eval_io<'a, Ctx: super::ResolverContextLike<'a> + Sync + Send>(
         &'a self,
         ctx: super::EvaluationContext<'a, Ctx>,
         _conc: &'a super::Concurrent,
-    ) -> Pin<Box<dyn Future<Output = Result<ConstValue>> + 'a + Send>> {
-        Box::pin(async move {
-            match self {
-                IO::Http { req_template, dl_id, .. } => {
-                    let req = req_template.to_request(&ctx)?;
-                    let is_get = req.method() == reqwest::Method::GET;
+    ) -> impl Future<Output = Result<ConstValue>> + 'a + Send {
+        let key = self.cache_key(&ctx);
+        async move {
+            ctx.request_ctx
+                .cache
+                .get_or_eval(key, move || async {
+                    self.eval_inner(ctx, _conc)
+                        .await
+                        .map_err(|err| err.to_string())
+                })
+                .await
+                .map_err(|err| anyhow::anyhow!(err))
+        }
+    }
 
-                    let res = if is_get && ctx.request_ctx.is_batching_enabled() {
-                        let data_loader: Option<&DataLoader<DataLoaderRequest, HttpDataLoader>> =
-                            dl_id.and_then(|index| ctx.request_ctx.http_data_loaders.get(index.0));
-                        execute_request_with_dl(&ctx, req, data_loader).await?
-                    } else {
-                        execute_raw_request(&ctx, req).await?
-                    };
+    async fn eval_inner<'a, Ctx: super::ResolverContextLike<'a> + Sync + Send>(
+        &'a self,
+        ctx: super::EvaluationContext<'a, Ctx>,
+        _conc: &'a super::Concurrent,
+    ) -> Result<ConstValue> {
+        match self {
+            IO::Http { req_template, dl_id, .. } => {
+                let req = req_template.to_request(&ctx)?;
+                let is_get = req.method() == reqwest::Method::GET;
 
-                    if ctx.request_ctx.server.get_enable_http_validation() {
-                        req_template
-                            .endpoint
-                            .output
-                            .validate(&res.body)
-                            .to_result()
-                            .map_err(EvaluationError::from)?;
-                    }
+                let res = if is_get && ctx.request_ctx.is_batching_enabled() {
+                    let data_loader: Option<&DataLoader<DataLoaderRequest, HttpDataLoader>> =
+                        dl_id.and_then(|index| ctx.request_ctx.http_data_loaders.get(index.0));
+                    execute_request_with_dl(&ctx, req, data_loader).await?
+                } else {
+                    execute_raw_request(&ctx, req).await?
+                };
 
-                    set_headers(&ctx, &res);
-
-                    Ok(res.body)
+                if ctx.request_ctx.server.get_enable_http_validation() {
+                    req_template
+                        .endpoint
+                        .output
+                        .validate(&res.body)
+                        .to_result()
+                        .map_err(EvaluationError::from)?;
                 }
-                IO::GraphQL { req_template, field_name, dl_id, .. } => {
-                    let req = req_template.to_request(&ctx)?;
 
-                    let res = if ctx.request_ctx.upstream.batch.is_some()
-                        && matches!(req_template.operation_type, GraphQLOperationType::Query)
-                    {
-                        let data_loader: Option<&DataLoader<DataLoaderRequest, GraphqlDataLoader>> =
-                            dl_id.and_then(|index| ctx.request_ctx.gql_data_loaders.get(index.0));
-                        execute_request_with_dl(&ctx, req, data_loader).await?
-                    } else {
-                        execute_raw_request(&ctx, req).await?
-                    };
+                set_headers(&ctx, &res);
 
-                    set_headers(&ctx, &res);
-                    parse_graphql_response(&ctx, res, field_name)
-                }
-                IO::Grpc { req_template, dl_id, .. } => {
-                    let rendered = req_template.render(&ctx)?;
+                Ok(res.body)
+            }
+            IO::GraphQL { req_template, field_name, dl_id, .. } => {
+                let req = req_template.to_request(&ctx)?;
 
-                    let res = if ctx.request_ctx.upstream.batch.is_some() &&
+                let res = if ctx.request_ctx.upstream.batch.is_some()
+                    && matches!(req_template.operation_type, GraphQLOperationType::Query)
+                {
+                    let data_loader: Option<&DataLoader<DataLoaderRequest, GraphqlDataLoader>> =
+                        dl_id.and_then(|index| ctx.request_ctx.gql_data_loaders.get(index.0));
+                    execute_request_with_dl(&ctx, req, data_loader).await?
+                } else {
+                    execute_raw_request(&ctx, req).await?
+                };
+
+                set_headers(&ctx, &res);
+                parse_graphql_response(&ctx, res, field_name)
+            }
+            IO::Grpc { req_template, dl_id, .. } => {
+                let rendered = req_template.render(&ctx)?;
+
+                let res = if ctx.request_ctx.upstream.batch.is_some() &&
                     // TODO: share check for operation_type for resolvers
                     matches!(req_template.operation_type, GraphQLOperationType::Query)
-                    {
-                        let data_loader: Option<
-                            &DataLoader<grpc::DataLoaderRequest, GrpcDataLoader>,
-                        > = dl_id.and_then(|index| ctx.request_ctx.grpc_data_loaders.get(index.0));
-                        execute_grpc_request_with_dl(&ctx, rendered, data_loader).await?
-                    } else {
-                        let req = rendered.to_request()?;
-                        execute_raw_grpc_request(&ctx, req, &req_template.operation).await?
-                    };
+                {
+                    let data_loader: Option<&DataLoader<grpc::DataLoaderRequest, GrpcDataLoader>> =
+                        dl_id.and_then(|index| ctx.request_ctx.grpc_data_loaders.get(index.0));
+                    execute_grpc_request_with_dl(&ctx, rendered, data_loader).await?
+                } else {
+                    let req = rendered.to_request()?;
+                    execute_raw_grpc_request(&ctx, req, &req_template.operation).await?
+                };
 
-                    set_headers(&ctx, &res);
+                set_headers(&ctx, &res);
 
-                    Ok(res.body)
-                }
+                Ok(res.body)
             }
-        })
+        }
     }
 }
 
