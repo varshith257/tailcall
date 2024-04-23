@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use futures_util::Future;
@@ -37,10 +36,10 @@ impl<Key: Eq + Hash + Send + Clone, Value: Debug + Clone + Send, Error: Debug + 
         self.cache.read().unwrap().get(key).cloned()
     }
 
-    pub async fn get_or_eval<'a>(
+    pub async fn get_or_eval<'a, F: Future<Output = Result<Value, Error>> + 'a + Send>(
         &self,
         key: Key,
-        or_else: impl FnOnce() -> Pin<Box<dyn Future<Output = Result<Value, Error>> + 'a + Send>> + Send,
+        or_else: impl FnOnce() -> F,
     ) -> Result<Value, Error> {
         if let Some(cache_value) = self.get_cache_value(&key) {
             match cache_value {
