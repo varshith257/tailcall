@@ -21,9 +21,9 @@ impl GlobalAuthContext {
     // graphql way with additional info. But this actually requires rewrites to
     // expression to work with that type since otherwise any additional info
     // will be lost during conversion to anyhow::Error
-    fn validate(&self, request: &RequestContext) -> Verification {
+    async fn validate(&self, request: &RequestContext) -> Verification {
         if let Some(verifier) = self.verifier.as_ref() {
-            verifier.verify(request)
+            verifier.verify(request).await
         } else {
             Verification::succeed()
         }
@@ -37,12 +37,12 @@ impl GlobalAuthContext {
 }
 
 impl AuthContext {
-    pub fn validate(&self, request: &RequestContext) -> Verification {
+    pub async fn validate(&self, request: &RequestContext) -> Verification {
         if let Some(result) = self.auth_result.read().unwrap().as_ref() {
             return result.clone();
         }
 
-        let result = self.global_ctx.validate(request);
+        let result = self.global_ctx.validate(request).await;
 
         self.auth_result.write().unwrap().replace(result.clone());
 
@@ -70,35 +70,42 @@ mod tests {
     use crate::auth::verify::Verifier;
     use crate::blueprint;
 
-    fn validate_request_missing_credentials() {
-        let auth_context = setup_auth_context();
-        let validation = auth_context.validate(&RequestContext::default());
+    #[tokio::test]
+    async fn validate_request_missing_credentials() {
+        let auth_context = setup_auth_context().await;
+        let validation = auth_context.validate(&RequestContext::default()).await;
         assert_eq!(validation, Verification::fail(Error::Missing));
     }
 
-    fn validate_request_basic_auth_wrong_password() {
-        let auth_context = setup_auth_context();
+    #[tokio::test]
+    async fn validate_request_basic_auth_wrong_password() {
+        let auth_context = setup_auth_context().await;
         let validation = auth_context
-            .validate(&create_basic_auth_request("testuser1", "wrong-password"));
+            .validate(&create_basic_auth_request("testuser1", "wrong-password"))
+            .await;
         assert_eq!(validation, Verification::fail(Error::Invalid));
     }
 
-    fn validate_request_basic_auth_correct_password() {
-        let auth_context = setup_auth_context();
+    #[tokio::test]
+    async fn validate_request_basic_auth_correct_password() {
+        let auth_context = setup_auth_context().await;
         let validation = auth_context
-            .validate(&create_basic_auth_request("testuser1", "password123"));
+            .validate(&create_basic_auth_request("testuser1", "password123"))
+            .await;
         assert_eq!(validation, Verification::succeed());
     }
 
-    fn validate_request_jwt_auth_valid_token() {
-        let auth_context = setup_auth_context();
+    #[tokio::test]
+    async fn validate_request_jwt_auth_valid_token() {
+        let auth_context = setup_auth_context().await;
         let validation = auth_context
-            .validate(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
+            .validate(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
+            .await;
         assert_eq!(validation, Verification::succeed());
     }
 
     // Helper function for setting up the auth context
-    fn setup_auth_context() -> GlobalAuthContext {
+    async fn setup_auth_context() -> GlobalAuthContext {
         let basic_provider =
             BasicVerifier::new(blueprint::Basic { htpasswd: HTPASSWD_TEST.to_owned() });
         let jwt_options = blueprint::Jwt::test_value();

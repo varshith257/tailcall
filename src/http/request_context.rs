@@ -133,18 +133,18 @@ impl RequestContext {
         }
     }
 
-    pub fn cache_get(&self, key: &u64) -> anyhow::Result<Option<ConstValue>> {
-        self.runtime.cache.get(key)
+    pub async fn cache_get(&self, key: &u64) -> anyhow::Result<Option<ConstValue>> {
+        self.runtime.cache.get(key).await
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn cache_insert(
+    pub async fn cache_insert(
         &self,
         key: u64,
         value: ConstValue,
         ttl: NonZeroU64,
     ) -> anyhow::Result<()> {
-        self.runtime.cache.set(key, value, ttl)
+        self.runtime.cache.set(key, value, ttl).await
     }
 
     pub fn is_batching_enabled(&self) -> bool {

@@ -65,16 +65,17 @@ pub trait FileIO: Send + Sync {
     async fn read<'a>(&'a self, path: &'a str) -> anyhow::Result<String>;
 }
 
+#[async_trait::async_trait]
 pub trait Cache: Send + Sync {
     type Key: Hash + Eq;
     type Value;
-    fn set(
-        &self,
+    async fn set<'a>(
+        &'a self,
         key: Self::Key,
         value: Self::Value,
         ttl: NonZeroU64,
     ) -> anyhow::Result<()>;
-    fn get<'a>(&'a self, key: &'a Self::Key) -> anyhow::Result<Option<Self::Value>>;
+    async fn get<'a>(&'a self, key: &'a Self::Key) -> anyhow::Result<Option<Self::Value>>;
 
     fn hit_rate(&self) -> Option<f64>;
 }

@@ -10,7 +10,7 @@ use async_graphql::ErrorExtensions;
 use async_graphql_value::ConstValue;
 use thiserror::Error;
 
-use super::{Concurrent, Eval, EvaluationContext, ResolverContextLike, IO, CacheKey};
+use super::{Concurrent, Eval, EvaluationContext, ResolverContextLike, IO};
 use crate::blueprint::DynamicValue;
 use crate::json::JsonLike;
 use crate::lambda::cache::Cache;
@@ -135,7 +135,7 @@ pub enum ExecutableExpression {
     Context(ExecutableContext),
     Dynamic(DynamicValue),
     IO(usize),
-    Cache { max_age: NonZeroU64, id: usize },
+    Cache(usize),
     Path(Option<Box<ExecutableExpression>>, Vec<String>),
     Protect(Box<ExecutableExpression>),
 }
@@ -234,10 +234,10 @@ pub enum ExecutableContext {
 //     }
 // }
 
-#[derive(Clone, Debug)]
 pub struct Executable {
     expression: ExecutableExpression,
     ios: Vec<IO>,
+    caches: Vec<Cache>,
 }
 
 impl Expression {
@@ -251,9 +251,11 @@ impl Expression {
 
     pub fn into_executable(self) -> Executable {
         let mut ios = vec![];
+        let mut caches = vec![];
         let mut executable = Executable {
             expression: ExecutableExpression::Dynamic(DynamicValue::Value(ConstValue::Null)),
             ios,
+            caches,
         };
         let mut expression = self.into_executable_expression(&mut executable);
         executable.expression = *expression;
@@ -289,17 +291,10 @@ impl Expression {
                 executable.ios.push(io);
                 ExecutableExpression::IO(id)
             },
-            Expression::Cache(Cache { expr, max_age }) => {
-                match *expr {
-                    Expression::IO(io) => {
-                        let id = executable.ios.len();
-                        executable.ios.push(io);
-                        ExecutableExpression::Cache { max_age, id }
-                    }
-                    x => {
-                        *x.into_executable_expression(executable)
-                    }
-                }
+            Expression::Cache(cache) => {
+                let id = executable.caches.len();
+                executable.caches.push(cache);
+                ExecutableExpression::Cache(id)
             },
             Expression::Path(expr, path) => ExecutableExpression::Path(Some(expr.as_ref().clone().into_executable_expression(executable)), path),
             Expression::Protect(expr) => ExecutableExpression::Protect(expr.as_ref().clone().into_executable_expression(executable)),
@@ -312,8 +307,7 @@ impl Executable {
         &'a mut self,
         ctx: EvaluationContext<'a, Ctx>,
     ) -> impl Future<Output=Result<ConstValue>> + 'a + Send {
-        let mut execution_stack = Vec::with_capacity(100);
-        execution_stack.push((ctx, self.expression.clone()));
+        let mut execution_stack = vec![(ctx, self.expression.clone())];
         let mut last_result = None;
         async move {
             while let Some((ctx, executable)) = execution_stack.pop() {
@@ -355,21 +349,8 @@ impl Executable {
                     ExecutableExpression::IO(id) => {
                         last_result = Some(self.ios[id].eval_io(ctx, &Concurrent::Sequential).await?)
                     }
-                    ExecutableExpression::Cache { max_age, id } => {
-                        let io = &self.ios[id];
-                        let key = io.cache_key(&ctx);
-
-                        let val = if let Some(val) = ctx.request_ctx.runtime.cache.get(&key)? {
-                            val
-                        } else {
-                            let val = io.eval_io(ctx.clone(), &Concurrent::Sequential).await?;
-                            ctx.request_ctx
-                                .runtime
-                                .cache
-                                .set(key, val.clone(), max_age)?;
-                            val
-                        };
-                        last_result = Some(val)
+                    ExecutableExpression::Cache(id) => {
+                        last_result = Some(self.caches[id].eval_cache(ctx, &Concurrent::Sequential).await?)
                     }
                     ExecutableExpression::Path(Some(expr), path) => {
                         execution_stack.push((ctx.clone(), ExecutableExpression::Path(None, path)));
@@ -387,6 +368,7 @@ impl Executable {
                         ctx.request_ctx
                             .auth_ctx
                             .validate(ctx.request_ctx)
+                            .await
                             .to_result()
                             .map_err(|e| anyhow!("Authentication Failure: {}", e.to_string()))?;
                         execution_stack.push((ctx, *expr))
@@ -439,6 +421,7 @@ impl Eval for Expression {
                     ctx.request_ctx
                         .auth_ctx
                         .validate(ctx.request_ctx)
+                        .await
                         .to_result()
                         .map_err(|e| anyhow!("Authentication Failure: {}", e.to_string()))?;
                     expr.eval(ctx, conc).await

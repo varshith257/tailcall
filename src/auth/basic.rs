@@ -12,9 +12,10 @@ pub struct BasicVerifier {
     verifier: Htpasswd<'static>,
 }
 
+#[async_trait::async_trait]
 impl Verify for BasicVerifier {
     /// Verify the request context against the basic auth provider.
-    fn verify(&self, req_ctx: &RequestContext) -> Verification {
+    async fn verify(&self, req_ctx: &RequestContext) -> Verification {
         let header = req_ctx
             .allowed_headers
             .typed_try_get::<Authorization<Basic>>();
@@ -71,48 +72,58 @@ testuser3:{SHA}Y2fEjdGT1W6nsLqtJbGUVeUp9e4=
         req_context
     }
 
-    fn verify_missing_credentials() {
+    #[tokio::test]
+    async fn verify_missing_credentials() {
         let provider = setup_provider();
-        let validation = provider.verify(&RequestContext::default());
+        let validation = provider.verify(&RequestContext::default()).await;
         assert_eq!(validation, Verification::fail(Error::Missing));
     }
 
-    fn verify_wrong_password() {
+    #[tokio::test]
+    async fn verify_wrong_password() {
         let provider = setup_provider();
         let validation = provider
-            .verify(&create_basic_auth_request("testuser1", "wrong-password"));
+            .verify(&create_basic_auth_request("testuser1", "wrong-password"))
+            .await;
         assert_eq!(validation, Verification::fail(Error::Invalid));
     }
 
-    fn verify_correct_password_testuser1() {
+    #[tokio::test]
+    async fn verify_correct_password_testuser1() {
         let provider = setup_provider();
         let validation = provider
-            .verify(&create_basic_auth_request("testuser1", "password123"));
+            .verify(&create_basic_auth_request("testuser1", "password123"))
+            .await;
         assert_eq!(validation, Verification::succeed());
     }
 
-    fn verify_correct_password_testuser2() {
+    #[tokio::test]
+    async fn verify_correct_password_testuser2() {
         let provider = setup_provider();
         let validation = provider
-            .verify(&create_basic_auth_request("testuser2", "mypassword"));
+            .verify(&create_basic_auth_request("testuser2", "mypassword"))
+            .await;
         assert_eq!(validation, Verification::succeed());
     }
 
-    fn verify_correct_password_testuser3() {
+    #[tokio::test]
+    async fn verify_correct_password_testuser3() {
         let provider = setup_provider();
         let validation = provider
-            .verify(&create_basic_auth_request("testuser3", "abc123"));
+            .verify(&create_basic_auth_request("testuser3", "abc123"))
+            .await;
         assert_eq!(validation, Verification::succeed());
     }
 
-    fn verify_auth_failure() {
+    #[tokio::test]
+    async fn verify_auth_failure() {
         let provider = setup_provider();
         let mut req_ctx = RequestContext::default();
         req_ctx.allowed_headers.insert(
             "Authorization",
             HeaderValue::from_static("Basic dGVzdHVzZXIyOm15cGFzc3dvcmQ"),
         );
-        let validation = provider.verify(&req_ctx);
+        let validation = provider.verify(&req_ctx).await;
         assert_eq!(validation, Verification::fail(Error::Invalid));
     }
 

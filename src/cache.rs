@@ -24,17 +24,18 @@ impl<K: Hash + Eq, V: Clone> InMemoryCache<K, V> {
     }
 }
 
+#[async_trait::async_trait]
 impl<K: Hash + Eq + Send + Sync, V: Clone + Send + Sync> crate::Cache for InMemoryCache<K, V> {
     type Key = K;
     type Value = V;
     #[allow(clippy::too_many_arguments)]
-    fn set(&self, key: K, value: V, ttl: NonZeroU64) -> anyhow::Result<()> {
+    async fn set<'a>(&'a self, key: K, value: V, ttl: NonZeroU64) -> anyhow::Result<()> {
         let ttl = Duration::from_millis(ttl.get());
         self.data.write().unwrap().insert(key, value, ttl);
         Ok(())
     }
 
-    fn get<'a>(&'a self, key: &'a K) -> anyhow::Result<Option<Self::Value>> {
+    async fn get<'a>(&'a self, key: &'a K) -> anyhow::Result<Option<Self::Value>> {
         Ok(self.data.read().unwrap().get(key).cloned())
     }
 
@@ -64,13 +65,13 @@ mod tests {
         let cache: crate::cache::InMemoryCache<u64, String> =
             crate::cache::InMemoryCache::default();
         let ttl = NonZeroU64::new(100).unwrap();
-        assert_eq!(cache.get(&10).ok(), Some(None));
+        assert_eq!(cache.get(&10).await.ok(), Some(None));
 
-        cache.set(10, "hello".into(), ttl).unwrap();
-        assert_eq!(cache.get(&10).ok(), Some(Some("hello".into())));
+        cache.set(10, "hello".into(), ttl).await.unwrap();
+        assert_eq!(cache.get(&10).await.ok(), Some(Some("hello".into())));
 
-        cache.set(10, "bye".into(), ttl).ok();
+        cache.set(10, "bye".into(), ttl).await.ok();
         tokio::time::sleep(Duration::from_millis(ttl.get())).await;
-        assert_eq!(cache.get(&10).ok(), Some(None));
+        assert_eq!(cache.get(&10).await.ok(), Some(None));
     }
 }

@@ -41,14 +41,15 @@ impl Cache {
         if let Expression::IO(io) = self.expr.deref() {
             let key = io.cache_key(&ctx);
 
-            if let Some(val) = ctx.request_ctx.runtime.cache.get(&key)? {
+            if let Some(val) = ctx.request_ctx.runtime.cache.get(&key).await? {
                 Ok(val)
             } else {
                 let val = self.expr.eval(ctx.clone(), conc).await?;
                 ctx.request_ctx
                     .runtime
                     .cache
-                    .set(key, val.clone(), self.max_age)?;
+                    .set(key, val.clone(), self.max_age)
+                    .await?;
                 Ok(val)
             }
         } else {
