@@ -8,7 +8,7 @@ use tracing::Instrument;
 
 use crate::blueprint::{Blueprint, Definition, Type};
 use crate::http::RequestContext;
-use crate::lambda::{EvaluationContext, Execute, ResolverContext};
+use crate::lambda::{EvaluationContext, ResolverContext};
 use crate::scalar::CUSTOM_SCALARS;
 
 fn to_type_ref(type_of: &Type) -> dynamic::TypeRef {
@@ -68,9 +68,7 @@ fn to_type(def: &Definition) -> dynamic::Type {
                                         let ctx: ResolverContext = ctx.into();
                                         let ctx = EvaluationContext::new(req_ctx, &ctx);
 
-                                        let const_value = executable
-                                            .execute(ctx)
-                                            .await?;
+                                        let const_value = executable.execute(ctx).await?;
 
                                         let p = match const_value {
                                             ConstValue::List(a) => Some(FieldValue::list(a)),

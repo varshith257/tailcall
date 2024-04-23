@@ -1,7 +1,5 @@
 use core::future::Future;
-use std::collections::{HashMap, VecDeque};
 use std::fmt::{Debug, Display};
-use std::num::NonZeroU64;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -154,86 +152,6 @@ pub enum ExecutableContext {
     },
 }
 
-// impl Execute for Executable {
-//     fn execute<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
-//         &'a self,
-//         ctx: EvaluationContext<'a, Ctx>,
-//         results: &'a [ConstValue],
-//     ) -> impl Future<Output = Result<ConstValue>> + 'a + Send {
-//         use Executable::*;
-//         async move {
-//             match self {
-//                 ExpressionContextValue => {
-//                     Ok(ctx.value().cloned().unwrap_or(async_graphql::Value::Null))
-//                 }
-//                 ExpressionContextPath { path } => Ok(ctx
-//                     .path_value(path)
-//                     .map(|a| a.into_owned())
-//                     .unwrap_or(async_graphql::Value::Null)),
-//                 ExpressionPath(input, path) => {
-//                     let input = results[*input].clone();
-//                     Ok(input
-//                         .get_path(path)
-//                         .unwrap_or(&async_graphql::Value::Null)
-//                         .clone())
-//                 }
-//                 ExpressionDynamic(value) => value.render_value(&ctx),
-//                 ExpressionProtect(expr) => {
-//                     ctx.request_ctx
-//                         .auth_ctx
-//                         .validate(ctx.request_ctx)
-//                         .await
-//                         .to_result()
-//                         .map_err(|e| anyhow!("Authentication Failure: {}", e.to_string()))?;
-//                     Ok(results[*expr].clone())
-//                 }
-//                 ExpressionIO(io) => io.eval_io(ctx, &Concurrent::Sequential).await,
-//                 ExpressionCache(cache) => cache.eval_cache(ctx, &Concurrent::Sequential).await,
-//             }
-//         }
-//     }
-// }
-//
-// pub enum ContextModifier {
-//     None,
-// }
-//
-// pub enum Operator {
-//     ExpressionContextValue,
-//     ExpressionContextPath,
-//     ContextPushArgs,
-//     ContextPushValue,
-//     ExpressionProtect,
-// }
-//
-// pub enum Value {
-//     Expression(Expression),
-//     ExpressionPath(Vec<String>),
-//     ExpressionDynamic(DynamicValue),
-//     ExpressionIO(IO),
-//     ExpressionCache(Cache),
-// }
-//
-// impl ContextModifier {
-//     pub fn modify_context<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
-//         &'a self,
-//         ctx: EvaluationContext<'a, Ctx>,
-//         results: &[ConstValue],
-//     ) -> EvaluationContext<'a, Ctx> {
-//         match self {
-//             ContextModifier::None => ctx,
-//             ContextModifier::ContextPushArgs(expr) => {
-//                 let expr = results[*expr].clone();
-//                 ctx.with_args(expr)
-//             }
-//             ContextModifier::ContextPushValue(expr) => {
-//                 let expr = results[*expr].clone();
-//                 ctx.with_value(expr)
-//             }
-//         }
-//     }
-// }
-
 pub struct Executable {
     expression: ExecutableExpression,
     ios: Vec<IO>,
@@ -250,38 +168,43 @@ impl Expression {
     }
 
     pub fn into_executable(self) -> Executable {
-        let mut ios = vec![];
-        let mut caches = vec![];
+        let ios = vec![];
+        let caches = vec![];
         let mut executable = Executable {
             expression: ExecutableExpression::Dynamic(DynamicValue::Value(ConstValue::Null)),
             ios,
             caches,
         };
-        let mut expression = self.into_executable_expression(&mut executable);
+        let expression = self.into_executable_expression(&mut executable);
         executable.expression = *expression;
 
         executable
     }
 
-    pub fn into_executable_expression(self, executable: &mut Executable) -> Box<ExecutableExpression> {
+    pub fn into_executable_expression(
+        self,
+        executable: &mut Executable,
+    ) -> Box<ExecutableExpression> {
         Box::new(match self {
             Expression::Context(ctx) => match ctx {
-                Context::Value => {
-                    ExecutableExpression::Context(ExecutableContext::Value)
-                }
-                Context::Path(path) => {
-                    ExecutableExpression::Context(ExecutableContext::Path(path))
-                }
+                Context::Value => ExecutableExpression::Context(ExecutableContext::Value),
+                Context::Path(path) => ExecutableExpression::Context(ExecutableContext::Path(path)),
                 Context::PushArgs { expr, and_then } => {
                     ExecutableExpression::Context(ExecutableContext::PushArgs {
                         expr: Some(expr.as_ref().clone().into_executable_expression(executable)),
-                        and_then: and_then.as_ref().clone().into_executable_expression(executable),
+                        and_then: and_then
+                            .as_ref()
+                            .clone()
+                            .into_executable_expression(executable),
                     })
                 }
                 Context::PushValue { expr, and_then } => {
                     ExecutableExpression::Context(ExecutableContext::PushValue {
                         expr: Some(expr.as_ref().clone().into_executable_expression(executable)),
-                        and_then: and_then.as_ref().clone().into_executable_expression(executable),
+                        and_then: and_then
+                            .as_ref()
+                            .clone()
+                            .into_executable_expression(executable),
                     })
                 }
             },
@@ -290,14 +213,19 @@ impl Expression {
                 let id = executable.ios.len();
                 executable.ios.push(io);
                 ExecutableExpression::IO(id)
-            },
+            }
             Expression::Cache(cache) => {
                 let id = executable.caches.len();
                 executable.caches.push(cache);
                 ExecutableExpression::Cache(id)
-            },
-            Expression::Path(expr, path) => ExecutableExpression::Path(Some(expr.as_ref().clone().into_executable_expression(executable)), path),
-            Expression::Protect(expr) => ExecutableExpression::Protect(expr.as_ref().clone().into_executable_expression(executable)),
+            }
+            Expression::Path(expr, path) => ExecutableExpression::Path(
+                Some(expr.as_ref().clone().into_executable_expression(executable)),
+                path,
+            ),
+            Expression::Protect(expr) => ExecutableExpression::Protect(
+                expr.as_ref().clone().into_executable_expression(executable),
+            ),
         })
     }
 }
@@ -306,7 +234,7 @@ impl Executable {
     pub fn execute<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
         &'a mut self,
         ctx: EvaluationContext<'a, Ctx>,
-    ) -> impl Future<Output=Result<ConstValue>> + 'a + Send {
+    ) -> impl Future<Output = Result<ConstValue>> + 'a + Send {
         let mut execution_stack = vec![(ctx, self.expression.clone())];
         let mut last_result = None;
         async move {
@@ -314,13 +242,15 @@ impl Executable {
                 match executable {
                     ExecutableExpression::Context(context) => match context {
                         ExecutableContext::Value => {
-                            last_result = Some(ctx.value().cloned().unwrap_or(async_graphql::Value::Null));
+                            last_result =
+                                Some(ctx.value().cloned().unwrap_or(async_graphql::Value::Null));
                         }
                         ExecutableContext::Path(path) => {
-                            last_result = Some(ctx
-                                .path_value(&path)
-                                .map(|a| a.into_owned())
-                                .unwrap_or(async_graphql::Value::Null))
+                            last_result = Some(
+                                ctx.path_value(&path)
+                                    .map(|a| a.into_owned())
+                                    .unwrap_or(async_graphql::Value::Null),
+                            )
                         }
                         ExecutableContext::PushArgs { expr: Some(expr), and_then } => {
                             let push_args = ExecutableContext::PushArgs { expr: None, and_then };
@@ -342,27 +272,34 @@ impl Executable {
                             let ctx = ctx.with_value(last_result.clone().unwrap());
                             execution_stack.push((ctx, *and_then));
                         }
-                    }
+                    },
                     ExecutableExpression::Dynamic(value) => {
                         last_result = Some(value.render_value(&ctx)?)
                     }
                     ExecutableExpression::IO(id) => {
-                        last_result = Some(self.ios[id].eval_io(ctx, &Concurrent::Sequential).await?)
+                        last_result =
+                            Some(self.ios[id].eval_io(ctx, &Concurrent::Sequential).await?)
                     }
                     ExecutableExpression::Cache(id) => {
-                        last_result = Some(self.caches[id].eval_cache(ctx, &Concurrent::Sequential).await?)
+                        last_result = Some(
+                            self.caches[id]
+                                .eval_cache(ctx, &Concurrent::Sequential)
+                                .await?,
+                        )
                     }
                     ExecutableExpression::Path(Some(expr), path) => {
                         execution_stack.push((ctx.clone(), ExecutableExpression::Path(None, path)));
                         execution_stack.push((ctx, *expr))
                     }
                     ExecutableExpression::Path(None, path) => {
-                        last_result = Some(last_result
-                            .clone()
-                            .unwrap()
-                            .get_path(&path)
-                            .unwrap_or(&async_graphql::Value::Null)
-                            .clone())
+                        last_result = Some(
+                            last_result
+                                .clone()
+                                .unwrap()
+                                .get_path(&path)
+                                .unwrap_or(&async_graphql::Value::Null)
+                                .clone(),
+                        )
                     }
                     ExecutableExpression::Protect(expr) => {
                         ctx.request_ctx
