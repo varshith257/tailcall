@@ -6,9 +6,8 @@ use super::verification::Verification;
 use crate::blueprint;
 use crate::http::RequestContext;
 
-#[async_trait::async_trait]
 pub(crate) trait Verify {
-    async fn verify(&self, req_ctx: &RequestContext) -> Verification;
+    fn verify(&self, req_ctx: &RequestContext) -> Verification;
 }
 
 pub enum Verifier {
@@ -45,27 +44,25 @@ impl From<blueprint::Auth> for AuthVerifier {
     }
 }
 
-#[async_trait::async_trait]
 impl Verify for Verifier {
-    async fn verify(&self, req_ctx: &RequestContext) -> Verification {
+    fn verify(&self, req_ctx: &RequestContext) -> Verification {
         match self {
-            Verifier::Basic(basic) => basic.verify(req_ctx).await,
-            Verifier::Jwt(jwt) => jwt.verify(req_ctx).await,
+            Verifier::Basic(basic) => basic.verify(req_ctx),
+            Verifier::Jwt(jwt) => jwt.verify(req_ctx),
         }
     }
 }
 
-#[async_trait::async_trait]
 impl Verify for AuthVerifier {
-    async fn verify(&self, req_ctx: &RequestContext) -> Verification {
+    fn verify(&self, req_ctx: &RequestContext) -> Verification {
         match self {
-            AuthVerifier::Single(verifier) => verifier.verify(req_ctx).await,
+            AuthVerifier::Single(verifier) => verifier.verify(req_ctx),
             AuthVerifier::And(left, right) => {
-                let (a, b) = join!(left.verify(req_ctx), right.verify(req_ctx));
+                let (a, b) = (left.verify(req_ctx), right.verify(req_ctx));
                 a.and(b)
             }
             AuthVerifier::Or(left, right) => {
-                left.verify(req_ctx).await.or(right.verify(req_ctx).await)
+                left.verify(req_ctx).or(right.verify(req_ctx))
             }
         }
     }
@@ -137,7 +134,7 @@ mod tests {
         req_ctx: &RequestContext,
         expected: Verification,
     ) {
-        assert_eq!(verifier.verify(req_ctx).await, expected);
+        assert_eq!(verifier.verify(req_ctx), expected);
     }
 
     fn setup_basic_verifier() -> AuthVerifier {

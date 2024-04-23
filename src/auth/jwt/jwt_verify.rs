@@ -46,7 +46,7 @@ impl JwtVerifier {
         Ok(value.map(|token| token.token().to_owned()))
     }
 
-    async fn validate_token(&self, token: &str) -> Verification {
+    fn validate_token(&self, token: &str) -> Verification {
         Verification::from_result(
             self.decoder.decode(token),
             |claims| self.validate_claims(&claims),
@@ -63,9 +63,8 @@ impl JwtVerifier {
     }
 }
 
-#[async_trait::async_trait]
 impl Verify for JwtVerifier {
-    async fn verify(&self, request: &RequestContext) -> Verification {
+    fn verify(&self, request: &RequestContext) -> Verification {
         let token = self.resolve_token(request);
         let Ok(token) = token else {
             return Verification::fail(Error::Invalid);
@@ -74,7 +73,7 @@ impl Verify for JwtVerifier {
             return Verification::fail(Error::Missing);
         };
 
-        self.validate_token(&token).await
+        self.validate_token(&token)
     }
 }
 
@@ -173,14 +172,12 @@ pub mod tests {
         req_context
     }
 
-    #[tokio::test]
-    async fn validate_token_iss() {
+    fn validate_token_iss() {
         let jwt_options = blueprint::Jwt::test_value();
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let valid = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(valid, Verification::succeed());
 
@@ -191,8 +188,7 @@ pub mod tests {
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let valid = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(valid, Verification::succeed());
 
@@ -203,20 +199,17 @@ pub mod tests {
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let error = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(error, Verification::fail(Error::Invalid));
     }
 
-    #[tokio::test]
-    async fn validate_token_aud() {
+    fn validate_token_aud() {
         let jwt_options = blueprint::Jwt::test_value();
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let valid = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(valid, Verification::succeed());
 
@@ -227,8 +220,7 @@ pub mod tests {
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let valid = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(valid, Verification::succeed());
 
@@ -239,8 +231,7 @@ pub mod tests {
         let jwt_provider = JwtVerifier::new(jwt_options);
 
         let error = jwt_provider
-            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID))
-            .await;
+            .verify(&create_jwt_auth_request(JWT_VALID_TOKEN_WITH_KID));
 
         assert_eq!(error, Verification::fail(Error::Invalid));
     }
