@@ -32,38 +32,32 @@ impl Cache {
             _ => None,
         })
     }
-
-    pub async fn eval_cache<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
-        &'a self,
-        ctx: EvaluationContext<'a, Ctx>,
-        conc: &'a Concurrent,
-    ) -> Result<ConstValue> {
-        if let Expression::IO(io) = self.expr.deref() {
-            let key = io.cache_key(&ctx);
-
-            if let Some(val) = ctx.request_ctx.runtime.cache.get(&key).await? {
-                Ok(val)
-            } else {
-                let val = self.expr.eval(ctx.clone(), conc).await?;
-                ctx.request_ctx
-                    .runtime
-                    .cache
-                    .set(key, val.clone(), self.max_age)
-                    .await?;
-                Ok(val)
-            }
-        } else {
-            Ok(self.expr.eval(ctx, conc).await?)
-        }
-    }
 }
 
 impl Eval for Cache {
     fn eval<'a, Ctx: ResolverContextLike<'a> + Sync + Send>(
         &'a self,
         ctx: EvaluationContext<'a, Ctx>,
-        _conc: &'a Concurrent,
+        conc: &'a Concurrent,
     ) -> Pin<Box<dyn Future<Output = Result<ConstValue>> + 'a + Send>> {
-        Box::pin(self.eval_cache(ctx, _conc))
+        Box::pin(async move {
+            if let Expression::IO(io) = self.expr.deref() {
+                let key = io.cache_key(&ctx);
+
+                if let Some(val) = ctx.request_ctx.runtime.cache.get(&key).await? {
+                    Ok(val)
+                } else {
+                    let val = self.expr.eval(ctx.clone(), conc).await?;
+                    ctx.request_ctx
+                        .runtime
+                        .cache
+                        .set(key, val.clone(), self.max_age)
+                        .await?;
+                    Ok(val)
+                }
+            } else {
+                Ok(self.expr.eval(ctx, conc).await?)
+            }
+        })
     }
 }
