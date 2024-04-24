@@ -8,7 +8,7 @@ use tracing::Instrument;
 
 use crate::blueprint::{Blueprint, Definition, Type};
 use crate::http::RequestContext;
-use crate::lambda::{EvaluationContext, ResolverContext};
+use crate::lambda::{EvaluationContext, Expression, ResolverContext};
 use crate::scalar::CUSTOM_SCALARS;
 
 fn to_type_ref(type_of: &Type) -> dynamic::TypeRef {
@@ -41,6 +41,8 @@ fn to_type(def: &Definition) -> dynamic::Type {
                 let field = field.clone();
                 let type_ref = to_type_ref(&field.of_type);
                 let field_name = &field.name.clone();
+                let maybe_resolver = field.resolver.clone().map(Expression::into_executable);
+
                 let mut dyn_schema_field = dynamic::Field::new(
                     field_name,
                     type_ref.clone(),
@@ -48,7 +50,7 @@ fn to_type(def: &Definition) -> dynamic::Type {
                         let req_ctx = ctx.ctx.data::<Arc<RequestContext>>().unwrap();
                         let field_name = &field.name;
 
-                        match &field.resolver {
+                        match &maybe_resolver {
                             None => {
                                 let ctx: ResolverContext = ctx.into();
                                 let ctx = EvaluationContext::new(req_ctx, &ctx);
@@ -57,12 +59,12 @@ fn to_type(def: &Definition) -> dynamic::Type {
                                         .map(|a| a.into_owned().to_owned()),
                                 )
                             }
-                            Some(expr) => {
+                            Some(executable) => {
                                 let span = tracing::info_span!(
                                     "field_resolver",
                                     otel.name = ctx.path_node.map(|p| p.to_string()).unwrap_or(field_name.clone()), graphql.returnType = %type_ref
                                 );
-                                let mut executable = expr.clone().into_executable();
+                                let mut executable = executable.clone();
                                 FieldFuture::new(
                                     async move {
                                         let ctx: ResolverContext = ctx.into();
