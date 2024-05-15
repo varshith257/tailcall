@@ -367,3 +367,4 @@ mod test {
         assert_eq!(new_headers.get("x-bar").unwrap(), "foo");
     }
 }
+
