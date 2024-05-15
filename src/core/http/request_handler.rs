@@ -1,10 +1,9 @@
 use std::collections::BTreeSet;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex}; // Import std::sync::Mutex
 
 use anyhow::Result;
 use async_graphql::ServerError;
-use hyper::header::{self, HeaderValue, CONTENT_TYPE};
+use hyper::header::{self, CONTENT_TYPE};
 use hyper::http::Method;
 use hyper::{Body, HeaderMap, Request, Response, StatusCode};
 use opentelemetry::trace::SpanKind;
