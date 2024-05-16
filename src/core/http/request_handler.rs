@@ -16,9 +16,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::request_context::RequestContext;
 use super::telemetry::{get_response_status_code, RequestCounter};
-use super::{showcase, telemetry, AppContext, TAILCALL_HTTPS_ORIGIN, TAILCALL_HTTP_ORIGIN};
+use super::{telemetry, AppContext};
 use crate::core::async_graphql_hyper::{GraphQLRequestLike, GraphQLResponse};
-use crate::core::blueprint::telemetry::TelemetryExporter;
 use crate::core::config::{PrometheusExporter, PrometheusFormat};
 
 pub const API_URL_PREFIX: &str = "/api";
@@ -55,9 +54,10 @@ async fn prometheus_metrics_middleware(
 }
 
 // Middleware for CORS
-async fn cors_middleware(
+async fn cors_middleware<T: DeserializeOwned + GraphQLRequestLike>(
     req: Request<Body>,
     app_ctx: Arc<AppContext>,
+    request_counter: &mut RequestCounter,
 ) -> Result<Option<Response<Body>>> {
     if let Some(cors) = app_ctx.blueprint.server.cors.as_ref() {
         let (parts, body) = req.into_parts();
@@ -136,25 +136,25 @@ async fn graphql_middleware<T: DeserializeOwned + GraphQLRequestLike>(
 
 // Middleware for REST API requests
 async fn rest_api_middleware(
-    req: Request<Body>,
+    mut req: Request<Body>,
     app_ctx: Arc<AppContext>,
     req_counter: &mut RequestCounter,
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
-        *request.uri_mut() = request.uri().path().replace(API_URL_PREFIX, "").parse()?;
-        let req_ctx = Arc::new(create_request_context(&request, app_ctx.as_ref()));
-        if let Some(p_request) = app_ctx.endpoints.matches(&request) {
+        *req.uri_mut() = req.uri().path().replace(API_URL_PREFIX, "").parse()?;
+        let req_ctx = Arc::new(create_request_context(&req, app_ctx.as_ref()));
+        if let Some(p_request) = app_ctx.endpoints.matches(&req) {
             let http_route = format!("{API_URL_PREFIX}{}", p_request.path.as_str());
             req_counter.set_http_route(&http_route);
             let span = tracing::info_span!(
                 "REST",
-                otel.name = format!("REST {} {}", request.method(), p_request.path.as_str()),
+                otel.name = format!("REST {} {}", req.method(), p_request.path.as_str()),
                 otel.kind = ?SpanKind::Server,
-                { HTTP_REQUEST_METHOD } = %request.method(),
+                { HTTP_REQUEST_METHOD } = %req.method(),
                 { HTTP_ROUTE } = http_route
             );
             return async {
-                let graphql_request = p_request.into_request(request).await?;
+                let graphql_request = p_request.into_request(req).await?;
                 let mut response = graphql_request
                     .data(req_ctx.clone())
                     .execute(&app_ctx.schema)
@@ -183,6 +183,51 @@ fn response_headers_middleware(
     req_ctx.extend_x_headers(resp.headers_mut());
 }
 
+// Function to set headers
+fn set_headers(
+    headers: &mut HeaderMap,
+    additional_headers: &HeaderMap,
+    cookie_headers: Option<&Arc<Mutex<HeaderMap>>>,
+) {
+    headers.extend(additional_headers.clone());
+
+    if let Some(cookie_headers) = cookie_headers {
+        let cookie_headers = cookie_headers.lock().unwrap();
+        headers.extend(cookie_headers.deref().clone());
+    }
+}
+
+// Function to create request context
+fn create_request_context(req: &Request<Body>, app_ctx: &AppContext) -> RequestContext {
+    let upstream = app_ctx.blueprint.upstream.clone();
+    let allowed = upstream.allowed_headers;
+    let allowed_headers = create_allowed_headers(req.headers(), &allowed);
+
+    let _allowed = app_ctx.blueprint.server.get_experimental_headers();
+    RequestContext::from(app_ctx).allowed_headers(allowed_headers)
+}
+
+// Function to update cache control header
+fn update_cache_control_header(
+    response: GraphQLResponse,
+    app_ctx: &AppContext,
+    req_ctx: Arc<RequestContext>,
+) -> GraphQLResponse {
+    if app_ctx.blueprint.server.enable_cache_control_header {
+        let ttl = req_ctx.get_min_max_age().unwrap_or(0);
+        let cache_public_flag = req_ctx.is_cache_public().unwrap_or(true);
+        return response.set_cache_control(ttl, cache_public_flag);
+    }
+    response
+}
+
+// Function to handle not found response
+fn not_found() -> Result<Response<Body>> {
+    Ok(Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::empty())?)
+}
+
 // Main request handler integrating middleware
 #[tracing::instrument(
     skip_all,
@@ -205,11 +250,11 @@ pub async fn handle_request<T: DeserializeOwned + GraphQLRequestLike>(
         return Ok(response);
     }
 
-    if let Some(response) = cors_middleware(req, app_ctx.clone()).await? {
+    if let Some(response) = cors_middleware::<T>(req, app_ctx.clone(), &mut req_counter).await? {
         return Ok(response);
     }
 
-    if let Some(response) = graphql_middleware(req, app_ctx.clone(), &mut req_counter).await? {
+    if let Some(response) = graphql_middleware::<T>(req, app_ctx.clone(), &mut req_counter).await? {
         return Ok(response);
     }
 
@@ -225,6 +270,49 @@ pub async fn handle_request<T: DeserializeOwned + GraphQLRequestLike>(
     };
 
     Ok(response)
+}
+
+// Function to handle inner request
+async fn handle_request_inner<T: DeserializeOwned + GraphQLRequestLike>(
+    req: Request<Body>,
+    app_ctx: Arc<AppContext>,
+    req_counter: &mut RequestCounter,
+) -> Result<Response<Body>> {
+    if req.uri().path().starts_with(API_URL_PREFIX) {
+        return rest_api_middleware(req, app_ctx, req_counter).await;
+    }
+
+    match *req.method() {
+        hyper::Method::POST if req.uri().path() == "/graphql" => {
+            graphql_middleware::<T>(req, app_ctx, req_counter).await
+        }
+        hyper::Method::GET => {
+            if let Some(TelemetryExporter::Prometheus(prometheus)) =
+                app_ctx.blueprint.telemetry.export.as_ref()
+            {
+                if req.uri().path() == prometheus.path {
+                    return prometheus_metrics_middleware(req, app_ctx).await;
+                }
+            };
+
+            not_found()
+        }
+        _ => not_found(),
+    }
+}
+
+// Function to create allowed headers
+fn create_allowed_headers(headers: &HeaderMap, allowed: &BTreeSet<String>) -> HeaderMap {
+    let mut new_headers = HeaderMap::new();
+    for (k, v) in headers.iter() {
+        if allowed
+            .iter()
+            .any(|allowed_key| allowed_key.eq_ignore_ascii_case(k.as_str()))
+        {
+            new_headers.insert(k, v.clone());
+        }
+    }
+    new_headers
 }
 
 #[cfg(test)]
