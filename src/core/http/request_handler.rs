@@ -225,6 +225,16 @@ fn update_cache_control_header(
     response
 }
 
+// Function to update response headers
+fn update_response_headers(
+    resp: &mut hyper::Response<hyper::Body>,
+    req_ctx: &RequestContext,
+    app_ctx: &AppContext,
+) {
+    set_headers(resp.headers_mut(), &app_ctx.blueprint.server.response_headers, req_ctx.cookie_headers.as_ref());
+    req_ctx.extend_x_headers(resp.headers_mut());
+}
+
 // Function to handle not found response
 fn not_found() -> Result<Response<Body>> {
     Ok(Response::builder()
@@ -267,8 +277,8 @@ pub async fn handle_request<T: DeserializeOwned + GraphQLRequestLike>(
     }
 
     let response = handle_request_inner::<T>(req, app_ctx, &mut req_counter).await?;
-    req_counter.update(&Ok(response));
-    if let Ok(response) = &Ok(response) {
+    req_counter.update(&Ok::<_, anyhow::Error>(response));
+    if let Ok(response) = &Ok::<_, anyhow::Error>(response) {
         let status = get_response_status_code(response);
         tracing::Span::current().set_attribute(status.key, status.value);
     };
