@@ -25,7 +25,7 @@ pub const API_URL_PREFIX: &str = "/api";
 
 // Middleware for Prometheus metrics
 async fn prometheus_metrics_middleware(
-    req: Request<Body>,
+    req: &Request<Body>,
     app_ctx: Arc<AppContext>,
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path() == "/metrics" {
@@ -59,12 +59,12 @@ async fn prometheus_metrics_middleware(
 
 // Middleware for CORS
 async fn cors_middleware<T: DeserializeOwned + GraphQLRequestLike>(
-    req: Request<Body>,
+    req: &Request<Body>,
     app_ctx: Arc<AppContext>,
     request_counter: &mut RequestCounter,
 ) -> Result<Option<Response<Body>>> {
     if let Some(cors) = app_ctx.blueprint.server.cors.as_ref() {
-        let (parts, body) = req.into_parts();
+        let (parts, body) = req.clone().into_parts();
         let origin = parts.headers.get(&header::ORIGIN);
 
         let mut headers = HeaderMap::new();
@@ -102,14 +102,14 @@ async fn cors_middleware<T: DeserializeOwned + GraphQLRequestLike>(
 
 // Middleware for GraphQL requests
 async fn graphql_middleware<T: DeserializeOwned + GraphQLRequestLike>(
-    req: Request<Body>,
+    req: &Request<Body>,
     app_ctx: Arc<AppContext>,
     req_counter: &mut RequestCounter,
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path() == "/graphql" {
         req_counter.set_http_route("/graphql");
-        let req_ctx = Arc::new(create_request_context(&req, &app_ctx));
-        let bytes = hyper::body::to_bytes(req.into_body()).await?;
+        let req_ctx = Arc::new(create_request_context(req, &app_ctx));
+        let bytes = hyper::body::to_bytes(req.clone().into_body()).await?;
         let graphql_request = serde_json::from_slice::<T>(&bytes);
         match graphql_request {
             Ok(request) => {
@@ -140,14 +140,14 @@ async fn graphql_middleware<T: DeserializeOwned + GraphQLRequestLike>(
 
 // Middleware for REST API requests
 async fn rest_api_middleware(
-    mut req: Request<Body>,
+    req: &mut Request<Body>,
     app_ctx: Arc<AppContext>,
     req_counter: &mut RequestCounter,
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
         *req.uri_mut() = req.uri().path().replace(API_URL_PREFIX, "").parse()?;
-        let req_ctx = Arc::new(create_request_context(&req, &app_ctx));
-        if let Some(p_request) = app_ctx.endpoints.matches(&req) {
+        let req_ctx = Arc::new(create_request_context(req, &app_ctx));
+        if let Some(p_request) = app_ctx.endpoints.matches(req) {
             let http_route = format!("{API_URL_PREFIX}{}", p_request.path.as_str());
             req_counter.set_http_route(&http_route);
             let span = tracing::info_span!(
@@ -158,7 +158,7 @@ async fn rest_api_middleware(
                 { HTTP_ROUTE } = http_route
             );
             return async {
-                let graphql_request = p_request.into_request(req).await?;
+                let graphql_request = p_request.into_request(req.clone()).await?;
                 let mut response = graphql_request
                     .data(req_ctx.clone())
                     .execute(&app_ctx.schema)
@@ -260,25 +260,26 @@ pub async fn handle_request<T: DeserializeOwned + GraphQLRequestLike>(
     telemetry::propagate_context(&req);
     let mut req_counter = RequestCounter::new(&app_ctx.blueprint.telemetry, &req);
 
-    if let Some(response) = prometheus_metrics_middleware(req, app_ctx.clone()).await? {
+    if let Some(response) = prometheus_metrics_middleware(&req, app_ctx.clone()).await? {
         return Ok(response);
     }
 
-    if let Some(response) = cors_middleware::<T>(req, app_ctx.clone(), &mut req_counter).await? {
+    if let Some(response) = cors_middleware::<T>(&req, app_ctx.clone(), &mut req_counter).await? {
         return Ok(response);
     }
 
-    if let Some(response) = graphql_middleware::<T>(req, app_ctx.clone(), &mut req_counter).await? {
+    if let Some(response) = graphql_middleware::<T>(&req, app_ctx.clone(), &mut req_counter).await? {
         return Ok(response);
     }
 
-    if let Some(response) = rest_api_middleware(req, app_ctx.clone(), &mut req_counter).await? {
+    let mut req_clone = req.clone();
+    if let Some(response) = rest_api_middleware(&mut req_clone, app_ctx.clone(), &mut req_counter).await? {
         return Ok(response);
     }
 
     let response = handle_request_inner::<T>(req, app_ctx, &mut req_counter).await?;
-    req_counter.update(&Ok::<_, anyhow::Error>(response));
-    if let Ok(response) = &Ok::<_, anyhow::Error>(response) {
+    req_counter.update(&Ok::<_, anyhow::Error>(&response));
+    if let Ok(response) = &Ok::<_, anyhow::Error>(&response) {
         let status = get_response_status_code(response);
         tracing::Span::current().set_attribute(status.key, status.value);
     };
@@ -293,19 +294,19 @@ async fn handle_request_inner<T: DeserializeOwned + GraphQLRequestLike>(
     req_counter: &mut RequestCounter,
 ) -> Result<Response<Body>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
-        return rest_api_middleware(req, app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
+        return rest_api_middleware(&mut req.clone(), app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
     }
 
     match *req.method() {
         hyper::Method::POST if req.uri().path() == "/graphql" => {
-            graphql_middleware::<T>(req, app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()))
+            graphql_middleware::<T>(&req, app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()))
         }
         hyper::Method::GET => {
             if let Some(TelemetryExporter::Prometheus(prometheus)) =
                 app_ctx.blueprint.telemetry.export.as_ref()
             {
                 if req.uri().path() == prometheus.path {
-                    return prometheus_metrics_middleware(req, app_ctx).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
+                    return prometheus_metrics_middleware(&req, app_ctx).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
                 }
             };
 
