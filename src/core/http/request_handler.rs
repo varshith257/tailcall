@@ -18,7 +18,8 @@ use super::request_context::RequestContext;
 use super::telemetry::{get_response_status_code, RequestCounter};
 use super::{telemetry, AppContext};
 use crate::core::async_graphql_hyper::{GraphQLRequestLike, GraphQLResponse};
-use crate::core::config::{PrometheusExporter, PrometheusFormat};
+use crate::core::blueprint::telemetry::TelemetryExporter;
+use crate::core::config::PrometheusFormat;
 
 pub const API_URL_PREFIX: &str = "/api";
 
@@ -28,7 +29,10 @@ async fn prometheus_metrics_middleware(
     app_ctx: Arc<AppContext>,
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path() == "/metrics" {
-        let prometheus_exporter = app_ctx.blueprint.telemetry.export.as_ref().unwrap();
+        let prometheus_exporter = match app_ctx.blueprint.telemetry.export.as_ref() {
+            Some(TelemetryExporter::Prometheus(exporter)) => exporter,
+            _ => return Ok(None),
+        };
         let metric_families = prometheus::default_registry().gather();
         let mut buffer = vec![];
 
@@ -104,16 +108,16 @@ async fn graphql_middleware<T: DeserializeOwned + GraphQLRequestLike>(
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path() == "/graphql" {
         req_counter.set_http_route("/graphql");
-        let req_ctx = Arc::new(create_request_context(&req, app_ctx));
+        let req_ctx = Arc::new(create_request_context(&req, &app_ctx));
         let bytes = hyper::body::to_bytes(req.into_body()).await?;
         let graphql_request = serde_json::from_slice::<T>(&bytes);
         match graphql_request {
             Ok(request) => {
                 let mut response = request.data(req_ctx.clone()).execute(&app_ctx.schema).await;
 
-                response = update_cache_control_header(response, app_ctx, req_ctx.clone());
+                response = update_cache_control_header(response, &app_ctx, req_ctx.clone());
                 let mut resp = response.into_response()?;
-                update_response_headers(&mut resp, &req_ctx, app_ctx);
+                update_response_headers(&mut resp, &req_ctx, &app_ctx);
                 return Ok(Some(resp));
             }
             Err(err) => {
@@ -142,7 +146,7 @@ async fn rest_api_middleware(
 ) -> Result<Option<Response<Body>>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
         *req.uri_mut() = req.uri().path().replace(API_URL_PREFIX, "").parse()?;
-        let req_ctx = Arc::new(create_request_context(&req, app_ctx.as_ref()));
+        let req_ctx = Arc::new(create_request_context(&req, &app_ctx));
         if let Some(p_request) = app_ctx.endpoints.matches(&req) {
             let http_route = format!("{API_URL_PREFIX}{}", p_request.path.as_str());
             req_counter.set_http_route(&http_route);
@@ -159,7 +163,7 @@ async fn rest_api_middleware(
                     .data(req_ctx.clone())
                     .execute(&app_ctx.schema)
                     .await;
-                response = update_cache_control_header(response, app_ctx.as_ref(), req_ctx.clone());
+                response = update_cache_control_header(response, &app_ctx, req_ctx.clone());
                 let mut resp = response.into_rest_response()?;
                 update_response_headers(&mut resp, &req_ctx, &app_ctx);
                 Ok(Some(resp))
@@ -263,8 +267,8 @@ pub async fn handle_request<T: DeserializeOwned + GraphQLRequestLike>(
     }
 
     let response = handle_request_inner::<T>(req, app_ctx, &mut req_counter).await?;
-    req_counter.update(&response);
-    if let Ok(response) = &response {
+    req_counter.update(&Ok(response));
+    if let Ok(response) = &Ok(response) {
         let status = get_response_status_code(response);
         tracing::Span::current().set_attribute(status.key, status.value);
     };
@@ -279,19 +283,19 @@ async fn handle_request_inner<T: DeserializeOwned + GraphQLRequestLike>(
     req_counter: &mut RequestCounter,
 ) -> Result<Response<Body>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
-        return rest_api_middleware(req, app_ctx, req_counter).await;
+        return rest_api_middleware(req, app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
     }
 
     match *req.method() {
         hyper::Method::POST if req.uri().path() == "/graphql" => {
-            graphql_middleware::<T>(req, app_ctx, req_counter).await
+            graphql_middleware::<T>(req, app_ctx, req_counter).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()))
         }
         hyper::Method::GET => {
             if let Some(TelemetryExporter::Prometheus(prometheus)) =
                 app_ctx.blueprint.telemetry.export.as_ref()
             {
                 if req.uri().path() == prometheus.path {
-                    return prometheus_metrics_middleware(req, app_ctx).await;
+                    return prometheus_metrics_middleware(req, app_ctx).await.map(|opt| opt.unwrap_or_else(|| not_found().unwrap()));
                 }
             };
 
