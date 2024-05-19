@@ -351,26 +351,26 @@ async fn handle_graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
     }
 }
 
-    #[cfg(test)]
-    mod test {
-        #[test]
-        fn test_create_allowed_headers() {
-            use std::collections::BTreeSet;
-    
-            use hyper::header::{HeaderMap, HeaderValue};
-    
-            use super::create_allowed_headers;
-    
-            let mut headers = HeaderMap::new();
-            headers.insert("X-foo", HeaderValue::from_static("bar"));
-            headers.insert("x-bar", HeaderValue::from_static("foo"));
-            headers.insert("x-baz", HeaderValue::from_static("baz"));
-    
-            let allowed = BTreeSet::from_iter(vec!["x-foo".to_string(), "X-bar".to_string()]);
-    
-            let new_headers = create_allowed_headers(&headers, &allowed);
-            assert_eq!(new_headers.len(), 2);
-            assert_eq!(new_headers.get("x-foo").unwrap(), "bar");
-            assert_eq!(new_headers.get("x-bar").unwrap(), "foo");
-        }
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_create_allowed_headers() {
+        use std::collections::BTreeSet;
+
+        use hyper::header::{HeaderMap, HeaderValue};
+
+        use super::create_allowed_headers;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-foo", HeaderValue::from_static("bar"));
+        headers.insert("x-bar", HeaderValue::from_static("foo"));
+        headers.insert("x-baz", HeaderValue::from_static("baz"));
+
+        let allowed = BTreeSet::from_iter(vec!["x-foo".to_string(), "X-bar".to_string()]);
+
+        let new_headers = create_allowed_headers(&headers, &allowed);
+        assert_eq!(new_headers.len(), 2);
+        assert_eq!(new_headers.get("x-foo").unwrap(), "bar");
+        assert_eq!(new_headers.get("x-bar").unwrap(), "foo");
     }
+}
