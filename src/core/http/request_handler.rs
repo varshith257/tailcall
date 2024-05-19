@@ -74,13 +74,12 @@ fn update_cache_control_header(
 }
 
 fn set_common_headers(headers: &mut HeaderMap, app_ctx: &AppContext, req_ctx: &RequestContext) {
-    if !app_ctx.blueprint.server.response_headers.is_empty() {
-        headers.extend(app_ctx.blueprint.server.response_headers.clone());
-    }
+    app_ctx.blueprint.server.response_headers.iter().for_each(|header| {
+        headers.insert(header.0.clone(), header.1.clone());
+    });
 
-    if let Some(ref cookie_headers) = req_ctx.cookie_headers {
-        let cookie_headers = cookie_headers.lock().unwrap();
-        headers.extend(cookie_headers.deref().clone());
+    if let Some(cookie_headers) = req_ctx.cookie_headers.as_ref().map(|ch| ch.lock().unwrap()) {
+        headers.extend(cookie_headers.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
 
     req_ctx.extend_x_headers(headers);
@@ -103,7 +102,7 @@ pub async fn graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
 ) -> Result<Response<Body>> {
     req_counter.set_http_route("/graphql");
     let req_ctx = Arc::new(create_request_context(&req, app_ctx));
-    handle_graphql_request(req, app_ctx, req_ctx).await
+    handle_graphql_request::<T>(req, app_ctx, req_ctx).await
 }
 
 fn create_allowed_headers(headers: &HeaderMap, allowed: &BTreeSet<String>) -> HeaderMap {
@@ -254,7 +253,7 @@ async fn handle_rest_apis(
             { HTTP_ROUTE } = http_route
         );
         return async {
-            handle_graphql_request(request, app_ctx.as_ref(), req_ctx).await
+            handle_graphql_request::<T>(request, app_ctx.as_ref(), req_ctx).await
         }
         .instrument(span)
         .await;
