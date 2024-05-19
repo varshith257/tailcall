@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::ops::Deref;
+// use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -235,7 +235,7 @@ async fn handle_graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
     }
 }
 
-async fn handle_rest_apis(
+async fn handle_rest_apis<T: DeserializeOwned + GraphQLRequestLike>(
     mut request: Request<Body>,
     app_ctx: Arc<AppContext>,
     req_counter: &mut RequestCounter,
