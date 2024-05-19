@@ -349,6 +349,7 @@ async fn handle_graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
         Some(_) => handle_request_with_cors::<T>(req, app_ctx, request_counter).await,
         None => handle_request_inner::<T>(req, app_ctx, request_counter).await,
     }
+}
 
     #[cfg(test)]
     mod test {
