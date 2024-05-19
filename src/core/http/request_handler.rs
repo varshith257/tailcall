@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-// use std::ops::Deref;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -74,12 +74,13 @@ fn update_cache_control_header(
 }
 
 fn set_common_headers(headers: &mut HeaderMap, app_ctx: &AppContext, req_ctx: &RequestContext) {
-    app_ctx.blueprint.server.response_headers.iter().for_each(|header| {
-        headers.insert(header.0.clone(), header.1.clone());
-    });
+    if !app_ctx.blueprint.server.response_headers.is_empty() {
+        headers.extend(app_ctx.blueprint.server.response_headers.clone());
+    }
 
-    if let Some(cookie_headers) = req_ctx.cookie_headers.as_ref().map(|ch| ch.lock().unwrap()) {
-        headers.extend(cookie_headers.iter().map(|(k, v)| (k.clone(), v.clone())));
+    if let Some(ref cookie_headers) = req_ctx.cookie_headers {
+        let cookie_headers = cookie_headers.lock().unwrap();
+        headers.extend(cookie_headers.deref().clone());
     }
 
     req_ctx.extend_x_headers(headers);
@@ -102,7 +103,31 @@ pub async fn graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
 ) -> Result<Response<Body>> {
     req_counter.set_http_route("/graphql");
     let req_ctx = Arc::new(create_request_context(&req, app_ctx));
-    handle_graphql_request::<T>(req, app_ctx, req_ctx).await
+    let bytes = hyper::body::to_bytes(req.into_body()).await?;
+    let graphql_request = serde_json::from_slice::<T>(&bytes);
+    match graphql_request {
+        Ok(request) => {
+            let mut response = request.data(req_ctx.clone()).execute(&app_ctx.schema).await;
+
+            response = update_cache_control_header(response, app_ctx, req_ctx.clone());
+            let mut resp = response.into_response()?;
+            update_response_headers(&mut resp, &req_ctx, app_ctx);
+            Ok(resp)
+        }
+        Err(err) => {
+            tracing::error!(
+                "Failed to parse request: {}",
+                String::from_utf8(bytes.to_vec()).unwrap()
+            );
+
+            let mut response = async_graphql::Response::default();
+            let server_error =
+                ServerError::new(format!("Unexpected GraphQL Request: {}", err), None);
+            response.errors = vec![server_error];
+
+            Ok(GraphQLResponse::from(response).into_response()?)
+        }
+    }
 }
 
 fn create_allowed_headers(headers: &HeaderMap, allowed: &BTreeSet<String>) -> HeaderMap {
@@ -203,39 +228,7 @@ async fn handle_request_with_cors<T: DeserializeOwned + GraphQLRequestLike>(
     }
 }
 
-async fn handle_graphql_request<T: DeserializeOwned + GraphQLRequestLike>(
-    request: Request<Body>,
-    app_ctx: &AppContext,
-    req_ctx: Arc<RequestContext>,
-) -> Result<Response<Body>> {
-    let bytes = hyper::body::to_bytes(request.into_body()).await?;
-    let graphql_request = serde_json::from_slice::<T>(&bytes);
-    match graphql_request {
-        Ok(request) => {
-            let mut response = request.data(req_ctx.clone()).execute(&app_ctx.schema).await;
-
-            response = update_cache_control_header(response, app_ctx, req_ctx.clone());
-            let mut resp = response.into_response()?;
-            update_response_headers(&mut resp, &req_ctx, app_ctx);
-            Ok(resp)
-        }
-        Err(err) => {
-            tracing::error!(
-                "Failed to parse request: {}",
-                String::from_utf8(bytes.to_vec()).unwrap()
-            );
-
-            let mut response = async_graphql::Response::default();
-            let server_error =
-                ServerError::new(format!("Unexpected GraphQL Request: {}", err), None);
-            response.errors = vec![server_error];
-
-            Ok(GraphQLResponse::from(response).into_response()?)
-        }
-    }
-}
-
-async fn handle_rest_apis<T: DeserializeOwned + GraphQLRequestLike>(
+async fn handle_rest_apis(
     mut request: Request<Body>,
     app_ctx: Arc<AppContext>,
     req_counter: &mut RequestCounter,
@@ -253,7 +246,15 @@ async fn handle_rest_apis<T: DeserializeOwned + GraphQLRequestLike>(
             { HTTP_ROUTE } = http_route
         );
         return async {
-            handle_graphql_request::<T>(request, app_ctx.as_ref(), req_ctx).await
+            let graphql_request = p_request.into_request(request).await?;
+            let mut response = graphql_request
+                .data(req_ctx.clone())
+                .execute(&app_ctx.schema)
+                .await;
+            response = update_cache_control_header(response, app_ctx.as_ref(), req_ctx.clone());
+            let mut resp = response.into_rest_response()?;
+            update_response_headers(&mut resp, &req_ctx, &app_ctx);
+            Ok(resp)
         }
         .instrument(span)
         .await;
@@ -268,7 +269,7 @@ async fn handle_request_inner<T: DeserializeOwned + GraphQLRequestLike>(
     req_counter: &mut RequestCounter,
 ) -> Result<Response<Body>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
-        return handle_rest_apis::<T>(req, app_ctx, req_counter).await;
+        return handle_rest_apis(req, app_ctx, req_counter).await;
     }
 
     match *req.method() {
