@@ -268,7 +268,7 @@ async fn handle_request_inner<T: DeserializeOwned + GraphQLRequestLike>(
     req_counter: &mut RequestCounter,
 ) -> Result<Response<Body>> {
     if req.uri().path().starts_with(API_URL_PREFIX) {
-        return handle_rest_apis(req, app_ctx, req_counter).await;
+        return handle_rest_apis::<T>(req, app_ctx, req_counter).await;
     }
 
     match *req.method() {
