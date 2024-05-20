@@ -95,7 +95,6 @@ pub fn update_response_headers(
     app_ctx: &AppContext,
 ) {
     set_common_headers(resp.headers_mut(), app_ctx, req_ctx);
-    // Additional logic specific to update_response_headers
 }
 
 #[tracing::instrument(skip_all, fields(otel.name = "graphQL", otel.kind = ?SpanKind::Server))]
