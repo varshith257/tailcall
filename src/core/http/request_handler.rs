@@ -75,14 +75,17 @@ fn update_cache_control_header(
 
 fn set_common_headers(headers: &mut HeaderMap, app_ctx: &AppContext, req_ctx: &RequestContext) {
     if !app_ctx.blueprint.server.response_headers.is_empty() {
+        // Add static response headers
         headers.extend(app_ctx.blueprint.server.response_headers.clone());
     }
-
+    
+    // Insert Cookie Headers
     if let Some(ref cookie_headers) = req_ctx.cookie_headers {
         let cookie_headers = cookie_headers.lock().unwrap();
         headers.extend(cookie_headers.deref().clone());
     }
-
+    
+    // Insert Experimental Headers
     req_ctx.extend_x_headers(headers);
 }
 
