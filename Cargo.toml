@@ -221,7 +221,7 @@ members = [
     "tailcall-tracker",
     "tailcall-hasher",
     "tailcall-http-cache",
-    "tailcall-version",
+    "tailcall-init",
 ]
 
 # Boost execution_spec snapshot diffing performance

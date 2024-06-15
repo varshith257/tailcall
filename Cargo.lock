@@ -5363,6 +5363,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tailcall-init"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "async-graphql-value",
+ "inquire",
+ "tokio",
+]
+
+[[package]]
 name = "tailcall-macros"
 version = "0.1.0"
 dependencies = [

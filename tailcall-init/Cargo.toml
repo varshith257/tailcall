@@ -1,0 +1,15 @@
+[package]
+name = "tailcall-init"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+inquire = "0.7.5"
+async-graphql-value = "7.0.3"
+async-graphql = { workspace = true, features = [
+    "dynamic-schema",
+    "dataloader",
+    "apollo_tracing",
+    "opentelemetry",
+] }
+tokio = { version = "1", features = ["full"] }
