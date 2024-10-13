@@ -164,10 +164,10 @@ impl InferTypeName {
 
             // If this is the first message, prepend the system message content
             if i == 0 {
-                question.fields.insert(
-                    0,
-                    ("system_message".to_string(), system_messages.to_string()),
-                );
+                let system_messages_str = serde_json::to_string_pretty(&system_messages).unwrap();
+                question
+                    .fields
+                    .insert(0, ("system_message".to_string(), system_messages_str));
             }
 
             let mut delay = 3;
