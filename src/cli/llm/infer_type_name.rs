@@ -87,6 +87,41 @@ impl InferTypeName {
         Self { wizard: Wizard::new(model, secret) }
     }
 
+    fn create_system_messages() -> Vec<ChatMessage> {
+        vec![
+            ChatMessage::system(
+                "Given the sample schema of a GraphQL type suggest 5 meaningful names for it.",
+            ),
+            ChatMessage::system("The name should be concise and preferably a single word"),
+            ChatMessage::system("Example Input:"),
+            ChatMessage::system(
+                serde_json::to_string_pretty(&Question {
+                    fields: vec![
+                        ("id".to_string(), "String".to_string()),
+                        ("name".to_string(), "String".to_string()),
+                        ("age".to_string(), "Int".to_string()),
+                    ],
+                })
+                .unwrap(),
+            ),
+            ChatMessage::system("Example Output:"),
+            ChatMessage::system(
+                serde_json::to_string_pretty(&Answer {
+                    suggestions: vec![
+                        "Person".into(),
+                        "Profile".into(),
+                        "Member".into(),
+                        "Individual".into(),
+                        "Contact".into(),
+                    ],
+                })
+                .unwrap(),
+            ),
+            ChatMessage::system("Ensure the output is in valid JSON format"),
+            ChatMessage::system("Do not add any additional text before or after the json"),
+        ]
+    }
+    
     /// All generated type names starts with PREFIX
     #[inline]
     fn is_auto_generated(type_name: &str) -> bool {
@@ -112,6 +147,8 @@ impl InferTypeName {
             .collect::<IndexSet<_>>();
 
         let total = types_to_be_processed.len();
+        let system_messages = Self::create_system_messages();
+        self.wizard.as_ref().unwrap().send_system_messages(&system_messages).await?;
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
             let question = Question {
@@ -125,7 +162,7 @@ impl InferTypeName {
 
             let mut delay = 3;
             loop {
-                let answer = self.wizard.ask(question.clone()).await;
+                let answer = self.wizard.ask_with_context(&question).await;
                 match answer {
                     Ok(answer) => {
                         let name = &answer.suggestions.join(", ");
@@ -169,6 +206,11 @@ impl InferTypeName {
 
         Ok(new_name_mappings)
     }
+async fn ask_with_context(&self, question: &Question) -> Result<Answer> {
+    let user_message = ChatMessage::user(serde_json::to_string(&question).unwrap());
+    self.wizard.as_ref().unwrap().ask(vec![user_message]).await
+}
+    
 }
 
 #[cfg(test)]
