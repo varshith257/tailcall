@@ -84,9 +84,7 @@ impl TryInto<ChatRequest> for Question {
 
 impl InferTypeName {
     pub fn new(model: String, secret: Option<String>) -> InferTypeName {
-        Self {
-            wizard: Wizard::new(model, secret),
-        }
+        Self { wizard: Wizard::new(model, secret) }
     }
 
     fn create_system_message() -> String {
