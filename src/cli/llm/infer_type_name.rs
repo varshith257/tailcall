@@ -84,7 +84,9 @@ impl TryInto<ChatRequest> for Question {
 
 impl InferTypeName {
     pub fn new(model: String, secret: Option<String>) -> InferTypeName {
-        Self { wizard: Wizard::new(model, secret) }
+        Self {
+            wizard: Wizard::new(model, secret),
+        }
     }
 
     fn create_system_messages() -> Vec<ChatMessage> {
@@ -121,7 +123,7 @@ impl InferTypeName {
             ChatMessage::system("Do not add any additional text before or after the json"),
         ]
     }
-    
+
     /// All generated type names starts with PREFIX
     #[inline]
     fn is_auto_generated(type_name: &str) -> bool {
@@ -148,7 +150,7 @@ impl InferTypeName {
 
         let total = types_to_be_processed.len();
         let system_messages = Self::create_system_messages();
-        self.wizard.as_ref().unwrap().send_system_messages(&system_messages).await?;
+        self.wizard.send_system_messages(&system_messages).await?;
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
             let question = Question {
@@ -162,7 +164,7 @@ impl InferTypeName {
 
             let mut delay = 3;
             loop {
-                let answer = self.wizard.ask_with_context(&question).await;
+                let answer = self.wizard.ask(question.clone()).await;
                 match answer {
                     Ok(answer) => {
                         let name = &answer.suggestions.join(", ");
@@ -206,11 +208,6 @@ impl InferTypeName {
 
         Ok(new_name_mappings)
     }
-async fn ask_with_context(&self, question: &Question) -> Result<Answer> {
-    let user_message = ChatMessage::user(serde_json::to_string(&question).unwrap());
-    self.wizard.as_ref().unwrap().ask(vec![user_message]).await
-}
-    
 }
 
 #[cfg(test)]
