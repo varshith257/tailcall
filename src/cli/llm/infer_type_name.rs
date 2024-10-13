@@ -149,7 +149,7 @@ impl InferTypeName {
             .collect::<IndexSet<_>>();
 
         let total = types_to_be_processed.len();
-        let system_message = create_system_message();
+        let system_message = Self::create_system_message();
 
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
