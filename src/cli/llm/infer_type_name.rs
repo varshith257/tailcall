@@ -153,15 +153,12 @@ impl InferTypeName {
         let system_messages = Self::create_system_messages();
         let system_message_str = system_messages
             .iter()
-            .filter_map(|msg| {
-                if let ChatMessage::System(content) = msg {
-                    Some(content.clone()) // Extract the content from the system message
-                } else {
-                    None
-                }
+            .map(|msg| match msg {
+                // Extract content from system and user messages
+                ChatMessage::User(content) | ChatMessage::System(content) => content.clone(),
             })
             .collect::<Vec<String>>()
-            .join("\n");
+            .join("\n"); //
 
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
