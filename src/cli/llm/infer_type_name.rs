@@ -150,7 +150,7 @@ impl InferTypeName {
 
         let total = types_to_be_processed.len();
         let system_messages = Self::create_system_messages();
-        self.wizard.send_system_messages(&system_messages).await?;
+        self.wizard.ask(system_messages).await?;
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
             let question = Question {
