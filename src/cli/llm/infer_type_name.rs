@@ -98,6 +98,7 @@ impl InferTypeName {
             ChatMessage::system("Example Input:"),
             ChatMessage::system(
                 serde_json::to_string_pretty(&Question {
+                    ignore: IndexSet::new(),
                     fields: vec![
                         ("id".to_string(), "String".to_string()),
                         ("name".to_string(), "String".to_string()),
@@ -150,7 +151,6 @@ impl InferTypeName {
 
         let total = types_to_be_processed.len();
         let system_messages = Self::create_system_messages();
-        self.wizard.ask(system_messages).await?;
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
             let question = Question {
@@ -166,10 +166,7 @@ impl InferTypeName {
             if i == 0 {
                 question.fields.insert(
                     0,
-                    (
-                        "system_message".to_string(),
-                        system_message_content.to_string(),
-                    ),
+                    ("system_message".to_string(), system_messages.to_string()),
                 );
             }
 
