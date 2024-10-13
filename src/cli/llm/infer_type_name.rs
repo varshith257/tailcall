@@ -153,7 +153,7 @@ impl InferTypeName {
 
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
-            let question = Question {
+            let mut question = Question {
                 ignore: used_type_names.clone(),
                 fields: type_
                     .fields
