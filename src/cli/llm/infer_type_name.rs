@@ -89,40 +89,39 @@ impl InferTypeName {
         }
     }
 
-    fn create_system_messages() -> Vec<ChatMessage> {
-        vec![
-            ChatMessage::system(
-                "Given the sample schema of a GraphQL type suggest 5 meaningful names for it.",
-            ),
-            ChatMessage::system("The name should be concise and preferably a single word"),
-            ChatMessage::system("Example Input:"),
-            ChatMessage::system(
-                serde_json::to_string_pretty(&Question {
-                    ignore: IndexSet::new(),
-                    fields: vec![
-                        ("id".to_string(), "String".to_string()),
-                        ("name".to_string(), "String".to_string()),
-                        ("age".to_string(), "Int".to_string()),
-                    ],
-                })
-                .unwrap(),
-            ),
-            ChatMessage::system("Example Output:"),
-            ChatMessage::system(
-                serde_json::to_string_pretty(&Answer {
-                    suggestions: vec![
-                        "Person".into(),
-                        "Profile".into(),
-                        "Member".into(),
-                        "Individual".into(),
-                        "Contact".into(),
-                    ],
-                })
-                .unwrap(),
-            ),
-            ChatMessage::system("Ensure the output is in valid JSON format"),
-            ChatMessage::system("Do not add any additional text before or after the json"),
-        ]
+    fn create_system_message() -> String {
+        let example_input = serde_json::to_string_pretty(&Question {
+            ignore: IndexSet::new(),
+            fields: vec![
+                ("id".to_string(), "String".to_string()),
+                ("name".to_string(), "String".to_string()),
+                ("age".to_string(), "Int".to_string()),
+            ],
+        })
+        .unwrap();
+
+        let example_output = serde_json::to_string_pretty(&Answer {
+            suggestions: vec![
+                "Person".into(),
+                "Profile".into(),
+                "Member".into(),
+                "Individual".into(),
+                "Contact".into(),
+            ],
+        })
+        .unwrap();
+
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "Given the sample schema of a GraphQL type suggest 5 meaningful names for it.",
+            "The name should be concise and preferably a single word.",
+            "Example Input:",
+            example_input,
+            "Example Output:",
+            example_output,
+            "Ensure the output is in valid JSON format.",
+            "Do not add any additional text before or after the json."
+        )
     }
 
     /// All generated type names starts with PREFIX
@@ -150,7 +149,7 @@ impl InferTypeName {
             .collect::<IndexSet<_>>();
 
         let total = types_to_be_processed.len();
-        let system_message = Self::create_system_messages();
+        let system_message = create_system_message();
 
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
