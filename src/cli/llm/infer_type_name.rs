@@ -162,6 +162,17 @@ impl InferTypeName {
                     .collect(),
             };
 
+            // If this is the first message, prepend the system message content
+            if i == 0 {
+                question.fields.insert(
+                    0,
+                    (
+                        "system_message".to_string(),
+                        system_message_content.to_string(),
+                    ),
+                );
+            }
+
             let mut delay = 3;
             loop {
                 let answer = self.wizard.ask(question.clone()).await;
