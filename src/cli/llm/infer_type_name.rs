@@ -151,6 +151,18 @@ impl InferTypeName {
 
         let total = types_to_be_processed.len();
         let system_messages = Self::create_system_messages();
+        let system_message_str = system_messages
+            .iter()
+            .filter_map(|msg| {
+                if let ChatMessage::System(content) = msg {
+                    Some(content.clone()) // Extract the content from the system message
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
             let question = Question {
@@ -164,10 +176,10 @@ impl InferTypeName {
 
             // If this is the first message, prepend the system message content
             if i == 0 {
-                let system_messages_str = serde_json::to_string_pretty(&system_messages).unwrap();
-                question
-                    .fields
-                    .insert(0, ("system_message".to_string(), system_messages_str));
+                question.fields.insert(
+                    0,
+                    ("system_message".to_string(), system_message_str.clone()),
+                );
             }
 
             let mut delay = 3;
