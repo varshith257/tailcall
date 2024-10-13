@@ -150,15 +150,7 @@ impl InferTypeName {
             .collect::<IndexSet<_>>();
 
         let total = types_to_be_processed.len();
-        let system_messages = Self::create_system_messages();
-        let system_message_str = system_messages
-            .iter()
-            .map(|msg| match msg {
-                // Extract content from system and user messages
-                ChatMessage::User(content) | ChatMessage::System(content) => content.clone(),
-            })
-            .collect::<Vec<String>>()
-            .join("\n"); //
+        let system_message = Self::create_system_messages();
 
         for (i, (type_name, type_)) in types_to_be_processed.into_iter().enumerate() {
             // convert type to sdl format.
@@ -173,10 +165,9 @@ impl InferTypeName {
 
             // If this is the first message, prepend the system message content
             if i == 0 {
-                question.fields.insert(
-                    0,
-                    ("system_message".to_string(), system_message_str.clone()),
-                );
+                question
+                    .fields
+                    .insert(0, ("system_message".to_string(), system_message.clone()));
             }
 
             let mut delay = 3;
